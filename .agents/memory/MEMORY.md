@@ -1,0 +1,1 @@
+- [Toolchain compatibility](toolchain-compatibility.md) — Prisma 6 and Tailwind 3 match the current schema/PostCSS setup; newer majors require coordinated migration.

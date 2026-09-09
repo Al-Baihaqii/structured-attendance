@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  CITY_ADMIN
+  MAHALLI_ADMIN
+  SECTOR_ADMIN
+  MUSYRIF
+}
+
+enum GroupStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
+enum AttendanceStatus {
+  HADIR
+  IZIN
+  SAKIT
+  ALPA
+}
+
+model User {
+  id                 String                    @id @default(cuid())
+  username           String                    @unique
+  passwordHash       String
+  name               String
+  email              String?
+  role               Role
+  isActive           Boolean                   @default(true)
+  sessionVersion     Int                       @default(0)
+  cityId             String?
+  mahalliId          String?
+  sectorId           String?
+  city               City?                     @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  mahalli            Mahalli?                  @relation(fields: [mahalliId], references: [id], onDelete: SetNull)
+  sector             Sector?                   @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  userGroups         UserGroup[]
+  changedAssignments GroupAssignmentHistory[] @relation("AssignmentChanger")
+  activityLogs       ActivityLog[]
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@index([role])
+  @@index([cityId])
+  @@index([mahalliId])
+  @@index([sectorId])
+}
+
+model City {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  mahallis  Mahalli[]
+  users     User[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Mahalli {
+  id        String    @id @default(cuid())
+  name      String
+  cityId    String
+  city      City      @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  isActive  Boolean   @default(true)
+  sectors   Sector[]
+  users     User[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([cityId, name])
+  @@index([cityId])
+}
+
+model Sector {
+  id        String    @id @default(cuid())
+  name      String
+  mahalliId String
+  mahalli   Mahalli   @relation(fields: [mahalliId], references: [id], onDelete: Cascade)
+  isActive  Boolean   @default(true)
+  groups    Group[]
+  users     User[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([mahalliId, name])
+  @@index([mahalliId])
+}
+
+model Group {
+  id                 String                    @id @default(cuid())
+  name               String
+  sectorId           String
+  sector             Sector                    @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  status             GroupStatus               @default(ACTIVE)
+  members            Member[]
+  userGroups         UserGroup[]
+  attendanceSessions AttendanceSession[]
+  assignmentHistory  GroupAssignmentHistory[]
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@unique([sectorId, name])
+  @@index([sectorId])
+  @@index([status])
+}
+
+model UserGroup {
+  id        String   @id @default(cuid())
+  userId    String
+  groupId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, groupId])
+  @@index([groupId])
+}
+
+model Member {
+  id               String             @id @default(cuid())
+  name             String
+  groupId          String
+  group            Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  isActive         Boolean            @default(true)
+  attendanceRecords AttendanceRecord[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([groupId])
+  @@index([isActive])
+}
+
+model GroupAssignmentHistory {
+  id            String    @id @default(cuid())
+  groupId       String
+  oldMusyrifId  String?
+  newMusyrifId  String?
+  changedById   String
+  reason        String?
+  group         Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  changedBy     User      @relation("AssignmentChanger", fields: [changedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime  @default(now())
+
+  @@index([groupId])
+  @@index([changedById])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String?
+  description String
+  actor      User     @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model AttendanceSession {
+  id             String             @id @default(cuid())
+  groupId        String
+  meetingNumber  Int
+  date           DateTime
+  notes          String?
+  group          Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  records        AttendanceRecord[]
+  createdAt      DateTime           @default(now())
+
+  @@unique([groupId, meetingNumber])
+  @@index([groupId])
+}
+
+model AttendanceRecord {
+  id        String           @id @default(cuid())
+  sessionId String
+  memberId  String
+  status    AttendanceStatus
+  reason    String?
+  session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  member    Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@unique([sessionId, memberId])
+  @@index([sessionId])
+  @@index([memberId])
+}
+
+model ExportHistory {
+  id         String   @id @default(cuid())
+  groupId    String
+  exportedBy String
+  format     String
+  fileName   String
+  createdAt  DateTime @default(now())
+
+  @@index([groupId])
+  @@index([exportedBy])
+}
