@@ -6,7 +6,11 @@ import { prisma } from "./prisma";
 import type { SessionUser } from "./types";
 
 export const SESSION_COOKIE = "structured_attendance_session";
-const sessionSecret = () => new TextEncoder().encode(process.env.AUTH_SECRET || "development-only-secret");
+const sessionSecret = () => {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new Error("Konfigurasi sesi server belum tersedia.");
+  return new TextEncoder().encode(secret);
+};
 
 type TokenPayload = Omit<SessionUser, "name"> & { name?: string };
 

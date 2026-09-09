@@ -15,13 +15,32 @@ export function LoginForm() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (loading) return;
     setError("");
     setLoading(true);
-    const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
-    const data = await response.json();
-    if (!response.ok) setError(data.error || "Gagal masuk.");
-    else router.push("/dashboard");
-    setLoading(false);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(data.error || "Username atau password tidak sesuai.");
+        return;
+      }
+
+      await router.replace("/dashboard");
+      router.refresh();
+    } catch {
+      console.error("[login] request failed");
+      setError("Tidak dapat terhubung ke server. Silakan coba lagi.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -35,7 +54,7 @@ export function LoginForm() {
         <label className="label" htmlFor="password">Password</label>
         <div className="relative"><LockKeyhole size={17} className="absolute left-3 top-3 text-slate-400" /><input id="password" className="input pl-10 pr-10" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Masukkan password" autoComplete="current-password" /><button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-3 top-3 text-slate-400 hover:text-brand" aria-label="Tampilkan password">{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>
       </div>
-      <button disabled={loading} className="btn-primary h-11 w-full">{loading ? "Memeriksa..." : "Masuk ke dashboard"}{!loading && <ArrowRight size={16} />}</button>
+      <button type="submit" disabled={loading} className="btn-primary h-11 w-full">{loading ? "Memeriksa..." : "Masuk ke dashboard"}{!loading && <ArrowRight size={16} />}</button>
     </form>
   );
 }
