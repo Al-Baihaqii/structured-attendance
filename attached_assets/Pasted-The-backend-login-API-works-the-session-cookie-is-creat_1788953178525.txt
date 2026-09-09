@@ -1,0 +1,61 @@
+The backend login API works, the session cookie is created, /api/auth/me returns SUPER_ADMIN, and /dashboard returns 200 in server/API checks.
+
+However, in the real browser UI, after clicking "Masuk ke dashboard", the page still stays on /login and the user is not redirected.
+
+Do not repeat the same backend-only verification. Debug the real browser login flow.
+
+Focus only on browser/client behavior.
+
+Check and fix:
+
+1. Browser console errors
+- Inspect whether login-form.tsx throws a JavaScript/runtime error after successful login.
+- Check whether router.replace("/dashboard") is actually reached.
+- Add temporary safe console logs such as:
+  - "submit started"
+  - "login response received"
+  - "login success, redirecting"
+  Do not log credentials or secrets.
+
+2. Redirect reliability
+- Replace router.replace("/dashboard") + router.refresh() with a more reliable browser redirect if needed:
+  window.location.assign("/dashboard")
+- The expected behavior after successful login is a full navigation to /dashboard.
+
+3. Button/form behavior
+- Ensure the form onSubmit is correctly attached to the actual <form>.
+- Ensure the submit button is inside the form.
+- Ensure no disabled/loading state gets stuck forever.
+- Ensure event.preventDefault() does not stop the login flow before fetch completes.
+
+4. Fetch result handling
+- Confirm fetch("/api/auth/login") returns response.ok === true for correct credentials in the actual browser.
+- If response.ok is true, redirect immediately.
+- If response.ok is false, show the Indonesian error message.
+
+5. Cookie behavior in Replit
+- Check whether the login cookie is being set in the actual browser after POST /api/auth/login.
+- In development, cookie options should be:
+  httpOnly: true
+  sameSite: "lax"
+  secure: false unless NODE_ENV === "production"
+  path: "/"
+- Do not use domain manually for the cookie.
+- Do not use secure=true in Replit development if it breaks cookie behavior.
+
+6. Middleware/dashboard protection
+- Confirm middleware does not redirect authenticated users back to /login.
+- Confirm /dashboard checks the same cookie name that /api/auth/login sets.
+- Confirm login page does not auto-redirect incorrectly.
+
+7. Real manual verification
+After changes:
+- Restart dev server.
+- Test login in the actual Replit preview.
+- Also test by opening the .replit.dev app in a new browser tab.
+- Report whether the URL changes to /dashboard after clicking the button.
+
+Expected final behavior:
+- Correct Super Admin credentials navigate to /dashboard visibly in the browser.
+- Wrong credentials show an Indonesian error.
+- The login button never appears to do nothing.
