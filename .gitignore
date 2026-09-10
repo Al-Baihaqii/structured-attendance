@@ -7,3 +7,10 @@ out
 coverage
 *.log
 prisma/*.db
+# Replit / agent temporary files
+.agents/
+screenshots/
+attached_assets/
+
+# TypeScript build cache
+*.tsbuildinfo
