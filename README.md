@@ -78,3 +78,5 @@ Authorization selalu divalidasi di server menggunakan gabungan `role` dan `scope
 ## Deployment ke Vercel
 
 Set environment variables di Vercel, jalankan `npm run db:generate` pada build, dan gunakan `DATABASE_URL` untuk runtime. Gunakan `DIRECT_URL` hanya untuk migration. Pastikan database production telah menerima schema sebelum membuka route dashboard. Jangan jalankan seed demo di production kecuali memang diinginkan.
+
+Production URL:https://structured-attendance-system.vercel.app
