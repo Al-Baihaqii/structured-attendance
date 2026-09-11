@@ -14,3 +14,4 @@ attached_assets/
 
 # TypeScript build cache
 *.tsbuildinfo
+.aider*
