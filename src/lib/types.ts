@@ -15,7 +15,18 @@ export type GroupWithScope = {
   id: string;
   sectorId: string;
   status?: string;
-  sector?: { mahalliId: string; mahalli?: { cityId: string } | null } | null;
+  sector?: {
+    mahalliId: string;
+    mahalli?: {
+      cityId: string;
+    } | null;
+  } | null;
+  userGroups?: {
+    userId?: string;
+    user?: {
+      id: string;
+    };
+  }[];
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
