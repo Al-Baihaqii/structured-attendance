@@ -25,6 +25,12 @@ export const memberSchema = z.object({
   name: z.string().trim().min(2, "Nama anggota wajib diisi.").max(100),
 });
 
+export const meetingSchema = z.object({
+  meetingNumber: z.number({ error: "Nomor pertemuan harus berupa bilangan bulat positif." }).int("Nomor pertemuan harus berupa bilangan bulat positif.").positive("Nomor pertemuan harus berupa bilangan bulat positif.").max(2147483647, "Nomor pertemuan terlalu besar."),
+  date: z.string({ error: "Tanggal pertemuan wajib diisi." }).min(1, "Tanggal pertemuan wajib diisi.").pipe(z.iso.date("Tanggal pertemuan tidak valid.")),
+  notes: z.string({ error: "Catatan harus berupa teks." }).trim().max(1000, "Catatan maksimal 1000 karakter.").optional(),
+});
+
 export const assignmentSchema = z.object({
   musyrifId: z.string().min(1, "Musyrif wajib dipilih."),
   reason: z.string().trim().max(250).optional(),
