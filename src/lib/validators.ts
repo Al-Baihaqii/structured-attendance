@@ -36,6 +36,26 @@ export const assignmentSchema = z.object({
   reason: z.string().trim().max(250).optional(),
 });
 
+export const attendanceRecordSchema = z.object({
+  memberId: z.string({ error: "Anggota wajib dipilih." }).trim().min(1, "Anggota wajib dipilih."),
+  status: z.enum(["HADIR", "IZIN", "SAKIT", "ALPA"], { error: "Status presensi tidak valid." }),
+  reason: z.string({ error: "Alasan harus berupa teks." }).trim().optional(),
+}).superRefine((record, ctx) => {
+  if ((record.status === "IZIN" || record.status === "ALPA") && !record.reason) {
+    ctx.addIssue({ code: "custom", path: ["reason"], message: "Alasan wajib diisi untuk status Izin dan Alpa." });
+  }
+});
+
+export const attendanceBatchSchema = z.object({
+  records: z.array(attendanceRecordSchema).min(1, "Belum ada presensi untuk disimpan."),
+}).superRefine(({ records }, ctx) => {
+  const memberIds = new Set<string>();
+  records.forEach((record, index) => {
+    if (memberIds.has(record.memberId)) ctx.addIssue({ code: "custom", path: ["records", index, "memberId"], message: "Anggota tidak boleh dikirim lebih dari satu kali." });
+    memberIds.add(record.memberId);
+  });
+});
+
 export function validateScopeForRole(role: z.infer<typeof userSchema>["role"], scope: { cityId?: string | null; mahalliId?: string | null; sectorId?: string | null; }) {
   if (role === "CITY_ADMIN" && !scope.cityId) return "Admin Kota harus memiliki kota.";
   if (role === "MAHALLI_ADMIN" && !scope.mahalliId) return "Admin Mahalli harus memiliki mahalli.";

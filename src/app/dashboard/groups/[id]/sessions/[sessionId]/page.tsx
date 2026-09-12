@@ -4,7 +4,9 @@ import { ArrowLeft, CalendarDays, UsersRound } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertMeetingAccess, AuthorizationError } from "@/lib/authorization";
-import { Card, StatusBadge } from "@/components/ui";
+import { Card } from "@/components/ui";
+
+import { AttendanceForm } from "@/components/attendance-form";
 
 export default async function MeetingDetailPage({ params }: { params: Promise<{ id: string; sessionId: string }> }) {
   const user = await getSession();
@@ -13,6 +15,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
   const session = await prisma.attendanceSession.findFirst({
     where: { id: sessionId, groupId },
     include: {
+      records: { select: { memberId: true, status: true, reason: true } },
       group: {
         include: {
           sector: { include: { mahalli: { include: { city: true } } } },
@@ -49,10 +52,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       </Card>
       <Card className="overflow-hidden">
         <div className="flex items-center gap-3 border-b border-line px-5 py-4"><div className="rounded-xl bg-brand-soft p-2.5 text-brand"><UsersRound size={19} /></div><div><h2 className="font-bold">Daftar anggota kelompok</h2><p className="mt-1 text-xs text-muted">{group.members.length} anggota</p></div></div>
-        <div className="divide-y divide-line">
-          {group.members.map((member) => <div className="flex items-center justify-between gap-3 px-5 py-4" key={member.id}><p className="min-w-0 break-words text-sm font-semibold">{member.name}</p><StatusBadge tone={member.isActive ? "green" : "amber"}>{member.isActive ? "Aktif" : "Nonaktif"}</StatusBadge></div>)}
-          {!group.members.length && <div className="p-8 text-center text-sm text-muted">Belum ada anggota pada kelompok ini.</div>}
-        </div>
+        <AttendanceForm key={session.id} groupId={group.id} sessionId={session.id} members={group.members} records={session.records} />
       </Card>
     </div>
   </div>;
