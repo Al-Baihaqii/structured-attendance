@@ -32,19 +32,19 @@ export function canCreateUserRole(
   if (currentUser.role === "CITY_ADMIN") {
     return (
       ["MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"].includes(targetRole) &&
-      targetScope.cityId === currentUser.cityId
+      Boolean(currentUser.cityId) && targetScope.cityId === currentUser.cityId
     );
   }
 
   if (currentUser.role === "MAHALLI_ADMIN") {
     return (
       ["SECTOR_ADMIN", "MUSYRIF"].includes(targetRole) &&
-      targetScope.mahalliId === currentUser.mahalliId
+      Boolean(currentUser.mahalliId) && targetScope.mahalliId === currentUser.mahalliId
     );
   }
 
   if (currentUser.role === "SECTOR_ADMIN") {
-    return targetRole === "MUSYRIF" && targetScope.sectorId === currentUser.sectorId;
+    return targetRole === "MUSYRIF" && Boolean(currentUser.sectorId) && targetScope.sectorId === currentUser.sectorId;
   }
 
   return false;

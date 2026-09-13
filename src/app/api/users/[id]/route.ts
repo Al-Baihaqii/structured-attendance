@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, requireAuth } from "@/lib/auth";
 import { canCreateUserRole, requireRole } from "@/lib/authorization";
 import { apiError, ok } from "@/lib/api";
-import { userSchema, validateScopeForRole } from "@/lib/validators";
+import { userSchema } from "@/lib/validators";
+import { validateUserScope } from "@/lib/user-scope";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,24 +14,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) return NextResponse.json({ error: "Pengguna tidak ditemukan." }, { status: 404 });
     const input = userSchema.partial().parse(await request.json());
-    const role = input.role || existing.role;
-    const scope = { cityId: input.cityId ?? existing.cityId, mahalliId: input.mahalliId ?? existing.mahalliId, sectorId: input.sectorId ?? existing.sectorId };
-    const scopeError = validateScopeForRole(role, scope);
-    if (scopeError) return NextResponse.json({ error: scopeError }, { status: 400 });
-    if (existing.id === currentUser.userId && role !== existing.role) return NextResponse.json({ error: "Anda tidak dapat mengubah peran sendiri." }, { status: 400 });
-    if (!canCreateUserRole(currentUser, role, scope) && existing.id !== currentUser.userId) {
-      return NextResponse.json({ error: "Pengguna berada di luar scope akses Anda." }, { status: 403 });
+    const isSelf = existing.id === currentUser.userId;
+    const role = input.role ?? existing.role;
+    const requestedScope = {
+      cityId: input.cityId === undefined ? existing.cityId : input.cityId || null,
+      mahalliId: input.mahalliId === undefined ? existing.mahalliId : input.mahalliId || null,
+      sectorId: input.sectorId === undefined ? existing.sectorId : input.sectorId || null,
+    };
+    if (isSelf && (role !== existing.role || requestedScope.cityId !== existing.cityId || requestedScope.mahalliId !== existing.mahalliId || requestedScope.sectorId !== existing.sectorId)) {
+      return NextResponse.json({ error: "Anda tidak dapat mengubah peran atau scope sendiri." }, { status: 403 });
+    }
+    if (!isSelf) {
+      const currentScope = await validateUserScope(existing.role, existing);
+      if (!canCreateUserRole(currentUser, existing.role, currentScope)) {
+        return NextResponse.json({ error: "Pengguna berada di luar scope akses Anda." }, { status: 403 });
+      }
+    }
+    const scope = await validateUserScope(role, requestedScope);
+    if (!isSelf && !canCreateUserRole(currentUser, role, scope)) {
+      return NextResponse.json({ error: "Scope atau peran tujuan berada di luar akses Anda." }, { status: 403 });
     }
     const updated = await prisma.user.update({
-      where: { id },
+      where: { id, role: existing.role, cityId: existing.cityId, mahalliId: existing.mahalliId, sectorId: existing.sectorId },
       data: {
         username: input.username,
         name: input.name,
         email: input.email === "" ? null : input.email,
-        role,
-        cityId: scope.cityId,
-        mahalliId: scope.mahalliId,
-        sectorId: scope.sectorId,
+        ...(!isSelf ? { role, ...scope } : {}),
         ...(input.password ? { passwordHash: await hashPassword(input.password), sessionVersion: { increment: 1 } } : {}),
       },
       select: { id: true, username: true, name: true, role: true, isActive: true },
