@@ -47,6 +47,7 @@ export const attendanceRecordSchema = z.object({
 });
 
 export const attendanceBatchSchema = z.object({
+  expectedVersion: z.number({ error: "Versi presensi wajib dikirim." }).int("Versi presensi tidak valid.").min(0, "Versi presensi tidak valid.").max(2147483646, "Versi presensi tidak valid."),
   records: z.array(attendanceRecordSchema).min(1, "Belum ada presensi untuk disimpan."),
 }).superRefine(({ records }, ctx) => {
   const memberIds = new Set<string>();

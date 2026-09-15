@@ -10,14 +10,16 @@ type Member = { id: string; name: string; isActive: boolean };
 type RecordValue = { memberId: string; status: AttendanceStatus; reason: string | null };
 type Draft = { status: AttendanceStatus | ""; reason: string };
 
-export function AttendanceForm({ groupId, sessionId, members, records }: { groupId: string; sessionId: string; members: Member[]; records: RecordValue[] }) {
+export function AttendanceForm({ groupId, sessionId, members, records, attendanceVersion }: { groupId: string; sessionId: string; members: Member[]; records: RecordValue[]; attendanceVersion: number }) {
   const router = useRouter();
+  const [baseline, setBaseline] = useState({ records, version: attendanceVersion });
+  const [conflict, setConflict] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   function valueFor(memberId: string): Draft {
-    const record = records.find((item) => item.memberId === memberId);
+    const record = baseline.records.find((item) => item.memberId === memberId);
     return drafts[memberId] || { status: record?.status || "", reason: record?.reason || "" };
   }
   function change(memberId: string, value: Draft) {
@@ -26,16 +28,18 @@ export function AttendanceForm({ groupId, sessionId, members, records }: { group
   }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (loading) return;
+    if (loading || conflict) return;
     setError(""); setSuccess("");
-    const input = attendanceBatchSchema.safeParse({ records: members.map((member) => ({ memberId: member.id, ...valueFor(member.id) })) });
+    const input = attendanceBatchSchema.safeParse({ expectedVersion: baseline.version, records: members.map((member) => ({ memberId: member.id, ...valueFor(member.id) })) });
     if (!input.success) { setError(input.error.issues[0]?.message || "Data presensi tidak valid."); return; }
     setLoading(true);
     try {
       const response = await fetch(`/api/groups/${groupId}/sessions/${sessionId}/attendance`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input.data) });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) { setError(data.error || "Gagal menyimpan presensi."); return; }
-      setSuccess("Presensi berhasil disimpan.");
+      if (!response.ok) { if (response.status === 409 && data.code === "ATTENDANCE_VERSION_CONFLICT") setConflict(true); setError(data.error || "Gagal menyimpan presensi."); return; }
+      setBaseline({ version: data.attendanceVersion, records: input.data.records.map((record) => ({ ...record, reason: record.reason || null })) });
+      setDrafts({});
+      setSuccess(data.changedCount === 0 ? "Tidak ada perubahan presensi." : "Presensi berhasil disimpan.");
       router.refresh();
     } catch {
       setError("Gagal menyimpan presensi. Periksa koneksi Anda dan coba kembali.");
@@ -56,6 +60,6 @@ export function AttendanceForm({ groupId, sessionId, members, records }: { group
       })}
       {!members.length && <div className="p-8 text-center text-sm text-muted">Belum ada anggota pada kelompok ini.</div>}
     </fieldset>
-    <div className="space-y-3 border-t border-line p-5"><Alert message={error} /><Alert message={success} tone="success" /><button className="btn-primary" type="submit" disabled={loading || !members.length}>{loading ? "Menyimpan..." : "Simpan presensi"}</button></div>
+    <div className="space-y-3 border-t border-line p-5"><Alert message={error} /><Alert message={success} tone="success" />{conflict && <button className="btn-quiet" type="button" onClick={() => { if (window.confirm("Muat ulang data terbaru? Input yang belum disimpan akan dibuang.")) window.location.reload(); }}>Muat ulang data terbaru</button>}<button className="btn-primary" type="submit" disabled={loading || conflict || !members.length}>{loading ? "Menyimpan..." : "Simpan presensi"}</button></div>
   </form>;
 }

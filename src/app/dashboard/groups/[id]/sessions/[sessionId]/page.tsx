@@ -52,7 +52,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       </Card>
       <Card className="overflow-hidden">
         <div className="flex items-center gap-3 border-b border-line px-5 py-4"><div className="rounded-xl bg-brand-soft p-2.5 text-brand"><UsersRound size={19} /></div><div><h2 className="font-bold">Daftar anggota kelompok</h2><p className="mt-1 text-xs text-muted">{group.members.length} anggota</p></div></div>
-        <AttendanceForm key={session.id} groupId={group.id} sessionId={session.id} members={group.members} records={session.records} />
+        <AttendanceForm key={session.id} groupId={group.id} sessionId={session.id} members={group.members} records={session.records} attendanceVersion={session.attendanceVersion} />
       </Card>
     </div>
   </div>;

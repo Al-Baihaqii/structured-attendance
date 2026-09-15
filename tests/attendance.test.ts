@@ -21,7 +21,7 @@ test("Hadir and Sakit accept omitted, empty, or supplied reasons", () => {
 
 test("batch rejects invalid statuses, duplicate members, and malformed input", () => {
   const record = { memberId: "m-1", status: "HADIR" };
-  for (const input of [null, {}, { records: [] }, { records: [record, record] }, { records: [record, { ...record, memberId: " m-1 " }] }, { records: [{ ...record, status: "" }] }, { records: [{ ...record, status: "OTHER" }] }, { records: [{ ...record, memberId: " " }] }, { records: [{ ...record, reason: 1 }] }]) {
+  for (const input of [null, {}, { expectedVersion: 0, records: [] }, { expectedVersion: 0, records: [record, record] }, { expectedVersion: 0, records: [record, { ...record, memberId: " m-1 " }] }, { expectedVersion: 0, records: [{ ...record, status: "" }] }, { expectedVersion: 0, records: [{ ...record, status: "OTHER" }] }, { expectedVersion: 0, records: [{ ...record, memberId: " " }] }, { expectedVersion: 0, records: [{ ...record, reason: 1 }] }]) {
     assert.equal(attendanceBatchSchema.safeParse(input).success, false);
   }
 });
@@ -33,8 +33,15 @@ test("batch validates every row and accepts mixed attendance statuses", () => {
     { memberId: "m-3", status: "SAKIT" },
     { memberId: "m-4", status: "ALPA", reason: "Tidak memberi kabar" },
   ];
-  assert.equal(attendanceBatchSchema.safeParse({ records }).success, true);
-  const result = attendanceBatchSchema.safeParse({ records: [...records, { memberId: "m-5", status: "ALPA" }] });
+  assert.equal(attendanceBatchSchema.safeParse({ expectedVersion: 0, records }).success, true);
+  const result = attendanceBatchSchema.safeParse({ expectedVersion: 0, records: [...records, { memberId: "m-5", status: "ALPA" }] });
   assert.equal(result.success, false);
   if (!result.success) assert.deepEqual(result.error.issues[0].path, ["records", 4, "reason"]);
+});
+
+
+test("attendance version must be a nonnegative integer", () => {
+  for (const expectedVersion of [undefined, null, "0", -1, 0.5, 2147483647]) {
+    assert.equal(attendanceBatchSchema.safeParse({ expectedVersion, records: [{ memberId: "m1", status: "HADIR" }] }).success, false);
+  }
 });
