@@ -12,7 +12,7 @@ const navItems = [
   { href: "/dashboard/wilayah", label: "Wilayah", icon: Map, roles: ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"] },
   { href: "/dashboard/groups", label: "Kelompok", icon: FolderKanban, roles: ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"] },
   { href: "/dashboard/users", label: "Pengguna", icon: UsersRound, roles: ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"] },
-  { href: "/dashboard/activity-logs", label: "Log Aktivitas", icon: Activity, roles: ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"] },
+  { href: "/dashboard/activity-logs", label: "Log Aktivitas", icon: Activity, roles: ["SUPER_ADMIN"] },
 ];
 
 export function DashboardShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {

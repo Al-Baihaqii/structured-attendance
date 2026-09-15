@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+import { requireRole, AuthorizationError } from "@/lib/authorization";
 import { Activity, Clock3 } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -6,7 +8,13 @@ import { Card, SectionHeading, StatusBadge } from "@/components/ui";
 export default async function ActivityLogsPage() {
   const user = await getSession();
   if (!user) return null;
-  const logs = await prisma.activityLog.findMany({ where: user.role === "SUPER_ADMIN" ? {} : { actor: { cityId: user.cityId ?? "__none__" } }, include: { actor: { select: { name: true, role: true } } }, orderBy: { createdAt: "desc" }, take: 100 });
+  try {
+    requireRole(user, ["SUPER_ADMIN"]);
+  } catch (error) {
+    if (error instanceof AuthorizationError) notFound();
+    throw error;
+  }
+  const logs = await prisma.activityLog.findMany({ select: { id: true, description: true, entityType: true, createdAt: true, actor: { select: { name: true, role: true } } }, orderBy: { createdAt: "desc" }, take: 100 });
   return <div>
     <SectionHeading eyebrow="Audit trail" title="Log aktivitas" description="Riwayat tindakan penting yang terjadi dalam scope Anda." action={<div className="flex items-center gap-2 text-xs text-muted"><Clock3 size={15} /> 100 aktivitas terbaru</div>} />
     <Card className="overflow-hidden">
