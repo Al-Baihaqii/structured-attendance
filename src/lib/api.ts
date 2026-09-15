@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
-import { AuthorizationError } from "./authorization";
+import { AuthorizationError, GroupDeletedError } from "./authorization";
 
 export function apiError(error: unknown) {
+  if (error instanceof GroupDeletedError) {
+    return NextResponse.json({ error: error.message, code: "GROUP_DELETED" }, { status: 409 });
+  }
   if (error instanceof ZodError) {
     return NextResponse.json({ error: error.issues[0]?.message || "Data tidak valid." }, { status: 400 });
   }

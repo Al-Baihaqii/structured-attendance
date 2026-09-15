@@ -1,4 +1,4 @@
-import type { Role } from "@prisma/client";
+import type { GroupStatus, Role } from "@prisma/client";
 import type { GroupWithScope, SessionUser } from "./types";
 
 export class AuthorizationError extends Error {
@@ -8,6 +8,17 @@ export class AuthorizationError extends Error {
     super(message);
     this.name = "AuthorizationError";
   }
+}
+
+export class GroupDeletedError extends Error {
+  constructor() {
+    super("Kelompok telah dihapus dan tidak dapat diubah.");
+    this.name = "GroupDeletedError";
+  }
+}
+
+export function assertGroupMutable(group: { status: GroupStatus }) {
+  if (group.status === "DELETED") throw new GroupDeletedError();
 }
 
 export function requireRole(currentUser: SessionUser, roles: Role[]) {

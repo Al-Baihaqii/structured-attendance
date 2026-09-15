@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { assertGroupAccess } from "@/lib/authorization";
+import { assertGroupAccess, assertGroupMutable } from "@/lib/authorization";
 import { apiError, ok } from "@/lib/api";
 import { groupSchema } from "@/lib/validators";
 
@@ -33,6 +33,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const group = await prisma.group.findUnique({ where: { id }, include: { sector: { include: { mahalli: true } } } });
     if (!group) return NextResponse.json({ error: "Kelompok tidak ditemukan." }, { status: 404 });
     assertGroupAccess(currentUser, group, "manage");
+    assertGroupMutable(group);
     const input = groupSchema.partial().parse(await request.json());
     const updated = await prisma.group.update({ where: { id }, data: { name: input.name, ...(input.sectorId ? { sectorId: input.sectorId } : {}) } });
     await prisma.activityLog.create({ data: { actorId: currentUser.userId, action: "UPDATE", entityType: "GROUP", entityId: id, description: `Memperbarui kelompok ${updated.name}.` } });
