@@ -11,10 +11,11 @@ let mutations: string[];
 const group = () => ({ id: "g1", name: "Group", status, sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, userGroups: [{ userId: "u1" }], assignmentHistory: [{ id: "history1" }] });
 const write = (name: string) => async ({ data }: any = {}) => { mutations.push(name); return { id: "result", ...data }; };
 const db = {
+  $queryRaw: async () => [],
   group: { findUnique: async () => group(), update: write("group") },
   member: { findUnique: async () => ({ id: "m1", name: "Member", group: group() }), findMany: async () => [{ id: "m1" }], create: write("member.create"), update: write("member.update") },
   user: { findUnique: async () => ({ id: "musyrif", name: "Musyrif", role: "MUSYRIF", isActive: true, sectorId: "s1" }) },
-  userGroup: { findFirst: async () => ({ id: "assignment", userId: "musyrif" }), create: write("assignment.create"), delete: write("assignment.delete") },
+  userGroup: { findMany: async () => [{ id: "assignment", userId: "musyrif" }], create: write("assignment.create"), delete: write("assignment.delete") },
   groupAssignmentHistory: { create: write("history") },
   attendanceSession: { findFirst: async () => ({ id: "a1", meetingNumber: 1, group: group() }), create: write("session.create"), updateMany: async () => { mutations.push("session.lock"); return { count: 1 }; }, update: write("session.update") },
   attendanceRecord: { findMany: async () => [], upsert: write("record") },
