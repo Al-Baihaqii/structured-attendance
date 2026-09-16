@@ -11,10 +11,17 @@ let allowed: boolean;
 let sessionExists: boolean;
 let memberExists: boolean;
 let writes: number;
+let events: string[];
+let groupStatus: string;
+let cityId: string;
+let user: any;
+let onLock: (() => void) | undefined;
+let onCommit: (() => void) | undefined;
 const tx = {
+  $queryRaw: async (_sql: any, id: string) => { assert.equal(id, "g1"); events.push("group.lock"); onLock?.(); return []; },
   attendanceSession: {
-    findFirst: async () => sessionExists ? { meetingNumber: 1, group: { id: "g1", name: "Group", sectorId: "s1", userGroups: allowed ? [{ userId: "u1" }] : [] } } : null,
-    updateMany: async ({ where }: any) => ({ count: where.attendanceVersion === version ? 1 : 0 }),
+    findFirst: async () => { events.push("session.read"); assert.equal(events.at(-2), "group.lock"); return sessionExists ? { meetingNumber: 1, group: { id: "g1", name: "Group", status: groupStatus, sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId } }, userGroups: allowed ? [{ userId: "u1" }] : [] } } : null; },
+    updateMany: async ({ where }: any) => { events.push("session.lock"); assert.ok(events.indexOf("group.lock") < events.indexOf("session.lock")); return { count: where.attendanceVersion === version ? 1 : 0 }; },
     findUnique: async () => ({ attendanceVersion: version }),
     update: async ({ data }: any) => { version = data.attendanceVersion; },
   },
@@ -32,15 +39,16 @@ const tx = {
 };
 const prismaPath = require.resolve("../src/lib/prisma");
 require(prismaPath);
-require.cache[prismaPath]!.exports = { prisma: { $transaction: async (fn: any) => {
+require.cache[prismaPath]!.exports = { prisma: { $transaction: async (fn: any, options: any) => {
+  assert.equal(options.isolationLevel, "ReadCommitted");
   const snapshot = structuredClone({ version, rows, logs });
-  try { return await fn(tx); } catch (error) { ({ version, rows, logs } = snapshot); throw error; }
+  try { const result = await fn(tx); events.push("commit"); onCommit?.(); return result; } catch (error) { ({ version, rows, logs } = snapshot); throw error; }
 } } };
 const authPath = require.resolve("../src/lib/auth");
 require(authPath);
-require.cache[authPath]!.exports = { requireAuth: async () => ({ userId: "u1", role: "MUSYRIF" }) };
+require.cache[authPath]!.exports = { requireAuth: async () => user };
 const { PATCH } = require("../src/app/api/groups/[id]/sessions/[sessionId]/attendance/route") as typeof import("../src/app/api/groups/[id]/sessions/[sessionId]/attendance/route");
-beforeEach(() => { version = 0; rows = []; logs = []; writes = 0; failLog = false; failWrite = false; allowed = true; sessionExists = true; memberExists = true; });
+beforeEach(() => { events = []; groupStatus = "ACTIVE"; cityId = "c1"; user = { userId: "u1", role: "MUSYRIF" }; onLock = undefined; onCommit = undefined; version = 0; rows = []; logs = []; writes = 0; failLog = false; failWrite = false; allowed = true; sessionExists = true; memberExists = true; });
 const save = (expectedVersion: number, records = [{ memberId: "m1", status: "HADIR", reason: "" }]) => PATCH(new Request("http://localhost/api/groups/g1/sessions/a1/attendance", { method: "PATCH", body: JSON.stringify({ expectedVersion, records }) }), { params: Promise.resolve({ id: "g1", sessionId: "a1" }) });
 
 test("changed batch increments version once and records only actual changes without reason text", async () => {
@@ -96,3 +104,29 @@ test("authorization and group membership failures happen before writes", async (
   memberExists = true; sessionExists = false; assert.equal((await save(0)).status, 404);
   assert.equal(writes, 0); assert.equal(logs.length, 0); assert.equal(version, 0);
 });
+
+for (const change of ["delete", "transfer", "revoke"] as const) {
+  function mutateGroup() {
+    if (change === "delete") groupStatus = "DELETED";
+    if (change === "transfer") cityId = "other";
+    if (change === "revoke") allowed = false;
+  }
+  test(`${change} commits before group lock: attendance reloads state and rejects without writes`, async () => {
+    if (change === "transfer") user = { userId: "u1", role: "CITY_ADMIN", cityId: "c1" };
+    onLock = mutateGroup;
+    const response = await save(0);
+    assert.equal(response.status, change === "delete" ? 409 : 403);
+    if (change === "delete") assert.equal((await response.json()).code, "GROUP_DELETED");
+    assert.equal(events.includes("session.lock"), false);
+    assert.equal(writes, 0); assert.deepEqual(logs, []); assert.equal(version, 0);
+  });
+  test(`attendance commits before ${change}: save succeeds, subsequent save rejects`, async () => {
+    if (change === "transfer") user = { userId: "u1", role: "CITY_ADMIN", cityId: "c1" };
+    onCommit = mutateGroup;
+    assert.equal((await save(0)).status, 200);
+    assert.deepEqual(events, ["group.lock", "session.read", "session.lock", "commit"]);
+    assert.equal(version, 1); assert.equal(logs.length, 1);
+    assert.equal((await save(1)).status, change === "delete" ? 409 : 403);
+    assert.equal(version, 1); assert.equal(logs.length, 1); assert.equal(writes, 1);
+  });
+}

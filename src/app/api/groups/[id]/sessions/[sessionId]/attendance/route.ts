@@ -5,6 +5,7 @@ import { assertMeetingAccess, assertGroupMutable } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { apiError, ok } from "@/lib/api";
 import { attendanceBatchSchema } from "@/lib/validators";
+import { lockGroup } from "@/lib/group-lock";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string; sessionId: string }> }) {
   try {
@@ -12,6 +13,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id: groupId, sessionId } = await params;
     const input = attendanceBatchSchema.parse(await request.json());
     return await prisma.$transaction(async (tx) => {
+      await lockGroup(tx, groupId);
       const session = await tx.attendanceSession.findFirst({ where: { id: sessionId, groupId }, include: { group: { include: { sector: { include: { mahalli: true } }, userGroups: true } } } });
       if (!session) return NextResponse.json({ error: "Pertemuan tidak ditemukan." }, { status: 404 });
       assertMeetingAccess(currentUser, session.group);
@@ -40,7 +42,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "UPDATE", entityType: "ATTENDANCE_SESSION", entityId: sessionId, description: `Menyimpan ${changes.length} perubahan presensi pada pertemuan ${session.meetingNumber} kelompok ${session.group.name}.`, metadata: { groupId, versionBefore: input.expectedVersion, versionAfter: attendanceVersion, changes } } });
       }
       return ok({ success: true, attendanceVersion, changedCount: changes.length });
-    });
+    }, { isolationLevel: "ReadCommitted" });
   } catch (error) {
     if (error instanceof SyntaxError) return NextResponse.json({ error: "Data presensi tidak valid." }, { status: 400 });
     if (error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError || error instanceof Prisma.PrismaClientInitializationError || error instanceof Prisma.PrismaClientValidationError) {
