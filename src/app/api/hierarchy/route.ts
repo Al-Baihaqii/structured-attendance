@@ -28,26 +28,43 @@ export async function POST(request: Request) {
 
     if (body.type === "city") {
       requireRole(currentUser, ["SUPER_ADMIN"]);
-      const city = await prisma.city.create({ data: { name } });
-      await prisma.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "CITY", entityId: city.id, description: `Membuat kota ${city.name}.` } });
+      const city = await prisma.$transaction(async (tx) => {
+        const newCity = await tx.city.create({ data: { name } });
+        await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "CITY", entityId: newCity.id, description: `Membuat kota ${newCity.name}.` } });
+        return newCity;
+      });
       return ok({ city }, { status: 201 });
     }
+    
     if (body.type === "mahalli") {
       requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN"]);
-      if (!body.cityId || (currentUser.role === "CITY_ADMIN" && body.cityId !== currentUser.cityId)) throw new Error("Kota berada di luar scope akses Anda.");
-      const mahalli = await prisma.mahalli.create({ data: { name, cityId: body.cityId } });
-      await prisma.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "MAHALLI", entityId: mahalli.id, description: `Membuat mahalli ${mahalli.name}.` } });
+      const cityId = body.cityId;
+      if (!cityId || (currentUser.role === "CITY_ADMIN" && cityId !== currentUser.cityId)) throw new Error("Kota berada di luar scope akses Anda.");
+      const mahalli = await prisma.$transaction(async (tx) => {
+        const city = await tx.city.findUnique({ where: { id: cityId } });
+        if (!city || city.isActive !== true) throw new Error("Kota tidak ditemukan atau tidak aktif.");
+        const newMahalli = await tx.mahalli.create({ data: { name, cityId } });
+        await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "MAHALLI", entityId: newMahalli.id, description: `Membuat mahalli ${newMahalli.name}.` } });
+        return newMahalli;
+      });
       return ok({ mahalli }, { status: 201 });
     }
+    
     if (body.type === "sector") {
       requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN"]);
-      if (!body.mahalliId) throw new Error("Mahalli wajib dipilih.");
-      const mahalli = await prisma.mahalli.findUnique({ where: { id: body.mahalliId } });
-      if (!mahalli || (currentUser.role === "CITY_ADMIN" && mahalli.cityId !== currentUser.cityId) || (currentUser.role === "MAHALLI_ADMIN" && mahalli.id !== currentUser.mahalliId)) throw new Error("Mahalli berada di luar scope akses Anda.");
-      const sector = await prisma.sector.create({ data: { name, mahalliId: body.mahalliId } });
-      await prisma.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "SECTOR", entityId: sector.id, description: `Membuat sektor ${sector.name}.` } });
+      const mahalliId = body.mahalliId;
+      if (!mahalliId) throw new Error("Mahalli wajib dipilih.");
+      const sector = await prisma.$transaction(async (tx) => {
+        const mahalli = await tx.mahalli.findUnique({ where: { id: mahalliId }, include: { city: true } });
+        if (!mahalli || mahalli.isActive !== true || !mahalli.city || mahalli.city.isActive !== true) throw new Error("Mahalli atau Kota tidak ditemukan atau tidak aktif.");
+        if ((currentUser.role === "CITY_ADMIN" && mahalli.cityId !== currentUser.cityId) || (currentUser.role === "MAHALLI_ADMIN" && mahalli.id !== currentUser.mahalliId)) throw new Error("Mahalli berada di luar scope akses Anda.");
+        const newSector = await tx.sector.create({ data: { name, mahalliId } });
+        await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "SECTOR", entityId: newSector.id, description: `Membuat sektor ${newSector.name}.` } });
+        return newSector;
+      });
       return ok({ sector }, { status: 201 });
     }
+    
     return NextResponse.json({ error: "Jenis wilayah tidak dikenali." }, { status: 400 });
   } catch (error) {
     return apiError(error);
