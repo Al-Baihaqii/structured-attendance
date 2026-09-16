@@ -56,13 +56,64 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   try {
     const currentUser = await requireAuth();
     requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"]);
+
     const { id } = await params;
-    if (id === currentUser.userId) return NextResponse.json({ error: "Anda tidak dapat menonaktifkan akun sendiri." }, { status: 400 });
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (!user || !canCreateUserRole(currentUser, user.role, user)) return NextResponse.json({ error: "Pengguna berada di luar scope akses Anda." }, { status: 403 });
-    await prisma.user.update({ where: { id }, data: { isActive: false, sessionVersion: { increment: 1 } } });
-    await prisma.activityLog.create({ data: { actorId: currentUser.userId, action: "DEACTIVATE", entityType: "USER", entityId: id, description: `Menonaktifkan pengguna ${user.name}.` } });
-    return ok({ success: true });
+
+    return await prisma.$transaction(async (tx) => {
+      if (id === currentUser.userId) {
+        return NextResponse.json(
+          { error: "Anda tidak dapat menonaktifkan akun sendiri." },
+          { status: 400 }
+        );
+      }
+
+      const user = await tx.user.findUnique({
+        where: { id },
+      });
+
+      if (!user) {
+        return NextResponse.json(
+          { error: "Pengguna tidak ditemukan." },
+          { status: 404 }
+        );
+      }
+
+      if (!canCreateUserRole(currentUser, user.role, user)) {
+        return NextResponse.json(
+          { error: "Pengguna berada di luar scope akses Anda." },
+          { status: 403 }
+        );
+      }
+
+      if (!user.isActive) {
+        return ok({ success: true });
+      }
+
+      await tx.user.update({
+        where: {
+          id,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+          sessionVersion: {
+            increment: 1,
+          },
+        },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          actorId: currentUser.userId,
+          action: "DEACTIVATE",
+          entityType: "USER",
+          entityId: id,
+          description: `Menonaktifkan pengguna ${user.name}.`,
+        },
+      });
+
+      return ok({ success: true });
+    });
   } catch (error) {
     return apiError(error);
   }
