@@ -28,13 +28,16 @@ export async function POST(request: Request) {
     const currentUser = await requireAuth();
     requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"]);
     const input = groupSchema.parse(await request.json());
-    const sector = await prisma.sector.findUnique({ where: { id: input.sectorId }, include: { mahalli: true } });
-    if (!sector) return NextResponse.json({ error: "Sektor tidak ditemukan." }, { status: 404 });
-    const scopeGroup = { id: "new", sectorId: sector.id, sector: { mahalliId: sector.mahalliId, mahalli: { cityId: sector.mahalli.cityId } } };
-    if (!canManageGroup(currentUser, scopeGroup)) return NextResponse.json({ error: "Anda tidak memiliki akses untuk mengelola kelompok pada sektor ini." }, { status: 403 });
-    const group = await prisma.group.create({ data: { name: input.name, sectorId: input.sectorId } });
-    await prisma.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "GROUP", entityId: group.id, description: `Membuat kelompok ${group.name}.` } });
-    return ok({ group }, { status: 201 });
+    return await prisma.$transaction(async (tx) => {
+      const sector = await tx.sector.findUnique({ where: { id: input.sectorId }, include: { mahalli: true } });
+      if (!sector) return NextResponse.json({ error: "Sektor tidak ditemukan." }, { status: 404 });
+      const scopeGroup = { id: "new", sectorId: sector.id, sector: { mahalliId: sector.mahalliId, mahalli: { cityId: sector.mahalli.cityId } } };
+      if (!canManageGroup(currentUser, scopeGroup)) return NextResponse.json({ error: "Anda tidak memiliki akses untuk mengelola kelompok pada sektor ini." }, { status: 403 });
+      if (!sector.isActive) return NextResponse.json({ error: "Sektor tidak aktif." }, { status: 409 });
+      const group = await tx.group.create({ data: { name: input.name, sectorId: input.sectorId } });
+      await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "GROUP", entityId: group.id, description: `Membuat kelompok ${group.name}.` } });
+      return ok({ group }, { status: 201 });
+    });
   } catch (error) {
     return apiError(error);
   }
