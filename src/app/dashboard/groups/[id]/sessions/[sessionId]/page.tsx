@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assertMeetingAccess, AuthorizationError } from "@/lib/authorization";
 import { Card } from "@/components/ui";
+import { summarizeAttendance } from "@/lib/attendance-summary";
 
 import { AttendanceForm } from "@/components/attendance-form";
 
@@ -33,6 +34,11 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
     throw error;
   }
   const { group } = session;
+  const summaryRecords = await prisma.attendanceRecord.findMany({
+    where: { sessionId: session.id, session: { groupId } },
+    select: { status: true },
+  });
+  const summary = summarizeAttendance(summaryRecords);
 
   return <div>
     <div className="mb-7">
@@ -43,6 +49,15 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       <p className="mt-1 text-sm text-muted">{group.sector.mahalli.city.name} · {group.sector.mahalli.name} · {group.sector.name}</p>
     </div>
     <div className="space-y-6">
+      <Card className="overflow-hidden">
+        <h2 className="border-b border-line px-5 py-4 font-bold">Ringkasan presensi</h2>
+        <dl className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-3">
+          <div><dt className="text-xs text-muted">Total presensi tercatat</dt><dd className="mt-1 text-sm font-semibold">{summary.totalRecorded}</dd></div>
+          {(["HADIR", "IZIN", "SAKIT", "ALPA"] as const).map((status) => <div key={status}><dt className="text-xs text-muted">{status}</dt><dd className="mt-1 text-sm font-semibold">{summary.counts[status]}</dd></div>)}
+          <div><dt className="text-xs text-muted">Persentase hadir dari presensi tercatat</dt><dd className="mt-1 text-sm font-semibold">{summary.percentage === null ? "Belum ada data" : `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 2 }).format(summary.percentage)}%`}</dd></div>
+        </dl>
+        <p className="px-5 pb-5 text-xs text-muted">Presensi yang belum tercatat tidak dihitung sebagai Alpa.</p>
+      </Card>
       <Card className="overflow-hidden">
         <div className="flex items-center gap-3 border-b border-line px-5 py-4"><div className="rounded-xl bg-brand-soft p-2.5 text-brand"><CalendarDays size={19} /></div><h2 className="font-bold">Informasi pertemuan</h2></div>
         <dl className="space-y-4 p-5">

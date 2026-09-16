@@ -8,6 +8,7 @@ import type { SessionUser } from "@/lib/types";
 import { ROLE_LABELS } from "@/lib/types";
 
 const navItems = [
+  { href: "/dashboard/attendance", label: "Presensi", icon: Activity, roles: ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"] },
   { href: "/dashboard", label: "Ringkasan", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"] },
   { href: "/dashboard/wilayah", label: "Wilayah", icon: Map, roles: ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"] },
   { href: "/dashboard/groups", label: "Kelompok", icon: FolderKanban, roles: ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"] },
