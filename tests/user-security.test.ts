@@ -8,12 +8,16 @@ const require = createRequire(import.meta.url);
 const prismaPath = require.resolve("../src/lib/prisma");
 require(prismaPath);
 const unexpected = async () => { throw new Error("Unexpected database call in test"); };
-const prisma = {
+const prismaMethods = {
   user: { findUnique: unexpected, update: unexpected, create: unexpected },
   activityLog: { create: unexpected },
   sector: { findUnique: unexpected },
   mahalli: { findUnique: unexpected },
   city: { findUnique: unexpected },
+};
+const prisma = {
+  ...prismaMethods,
+  $transaction: async <T>(callback: (tx: typeof prismaMethods) => Promise<T>): Promise<T> => callback(prisma),
 };
 require.cache[prismaPath]!.exports = { prisma };
 const authPath = require.resolve("../src/lib/auth");

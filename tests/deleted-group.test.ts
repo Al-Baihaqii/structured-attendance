@@ -13,7 +13,7 @@ const write = (name: string) => async ({ data }: any = {}) => { mutations.push(n
 const db = {
   $queryRaw: async () => [],
   group: { findUnique: async () => group(), update: write("group") },
-  member: { findUnique: async () => ({ id: "m1", name: "Member", group: group() }), findMany: async () => [{ id: "m1" }], create: write("member.create"), update: write("member.update") },
+  member: { findUnique: async () => ({ id: "m1", groupId: "g1", name: "Original", group: group() }), findMany: async () => [{ id: "m1" }], create: write("member.create"), update: write("member.update"), updateMany: async () => { mutations.push("member.update"); return { count: 1 }; } },
   user: { findUnique: async () => ({ id: "musyrif", name: "Musyrif", role: "MUSYRIF", isActive: true, sectorId: "s1" }) },
   userGroup: { findMany: async () => [{ id: "assignment", userId: "musyrif" }], create: write("assignment.create"), delete: write("assignment.delete") },
   groupAssignmentHistory: { create: write("history") },

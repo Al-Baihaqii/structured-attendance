@@ -34,19 +34,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!isSelf && !canCreateUserRole(currentUser, role, scope)) {
       return NextResponse.json({ error: "Scope atau peran tujuan berada di luar akses Anda." }, { status: 403 });
     }
-    const updated = await prisma.user.update({
-      where: { id, role: existing.role, cityId: existing.cityId, mahalliId: existing.mahalliId, sectorId: existing.sectorId },
-      data: {
-        username: input.username,
-        name: input.name,
-        email: input.email === "" ? null : input.email,
-        ...(!isSelf ? { role, ...scope } : {}),
-        ...(input.password ? { passwordHash: await hashPassword(input.password), sessionVersion: { increment: 1 } } : {}),
-      },
-      select: { id: true, username: true, name: true, role: true, isActive: true },
+    const passwordHash = input.password ? await hashPassword(input.password) : undefined;
+    return await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id, role: existing.role, cityId: existing.cityId, mahalliId: existing.mahalliId, sectorId: existing.sectorId },
+        data: {
+          username: input.username,
+          name: input.name,
+          email: input.email === "" ? null : input.email,
+          ...(!isSelf ? { role, ...scope } : {}),
+          ...(input.password ? { passwordHash: passwordHash, sessionVersion: { increment: 1 } } : {}),
+        },
+        select: { id: true, username: true, name: true, role: true, isActive: true },
+      });
+      await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "UPDATE", entityType: "USER", entityId: id, description: `Memperbarui pengguna ${updated.name}.` } });
+      return ok({ user: updated });
     });
-    await prisma.activityLog.create({ data: { actorId: currentUser.userId, action: "UPDATE", entityType: "USER", entityId: id, description: `Memperbarui pengguna ${updated.name}.` } });
-    return ok({ user: updated });
   } catch (error) {
     return apiError(error);
   }

@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, requireAuth } from "@/lib/auth";
@@ -40,22 +41,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Anda tidak memiliki akses untuk membuat pengguna dengan scope tersebut." }, { status: 403 });
     }
 
-    const exists = await prisma.user.findUnique({ where: { username: input.username } });
-    if (exists) return NextResponse.json({ error: "Username sudah digunakan." }, { status: 409 });
-    const user = await prisma.user.create({
-      data: {
-        username: input.username,
-        name: input.name,
-        email: input.email || null,
-        passwordHash: await hashPassword(input.password),
-        role: input.role,
-        ...scope,
-      },
-      select: { id: true, username: true, name: true, role: true },
+    const passwordHash = await hashPassword(input.password);
+    return await prisma.$transaction(async (tx) => {
+      const exists = await tx.user.findUnique({ where: { username: input.username } });
+      if (exists) return NextResponse.json({ error: "Username sudah digunakan." }, { status: 409 });
+      const user = await tx.user.create({
+        data: {
+          username: input.username,
+          name: input.name,
+          email: input.email || null,
+          passwordHash,
+          role: input.role,
+          ...scope,
+        },
+        select: { id: true, username: true, name: true, role: true },
+      });
+      await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "USER", entityId: user.id, description: `Membuat pengguna ${user.name} (${user.role}).` } });
+      return ok({ user }, { status: 201 });
     });
-    await prisma.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "USER", entityId: user.id, description: `Membuat pengguna ${user.name} (${user.role}).` } });
-    return ok({ user }, { status: 201 });
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+      && Array.isArray(error.meta?.target) && error.meta.target.includes("username")) {
+      return NextResponse.json({ error: "Username sudah digunakan." }, { status: 409 });
+    }
     return apiError(error);
   }
 }
