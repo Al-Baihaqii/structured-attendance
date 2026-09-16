@@ -79,12 +79,50 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   try {
     const currentUser = await requireAuth();
     const { id } = await params;
-    const group = await prisma.group.findUnique({ where: { id }, include: { sector: { include: { mahalli: true } } } });
-    if (!group) return NextResponse.json({ error: "Kelompok tidak ditemukan." }, { status: 404 });
-    assertGroupAccess(currentUser, group, "manage");
-    await prisma.group.update({ where: { id }, data: { status: "DELETED" } });
-    await prisma.activityLog.create({ data: { actorId: currentUser.userId, action: "DELETE", entityType: "GROUP", entityId: id, description: `Menghapus kelompok ${group.name}.` } });
-    return ok({ success: true });
+
+    return await prisma.$transaction(async (tx) => {
+      await lockGroup(tx, id);
+
+      const group = await tx.group.findUnique({
+        where: { id },
+        include: {
+          sector: {
+            include: {
+              mahalli: true,
+            },
+          },
+        },
+      });
+
+      if (!group) {
+        return NextResponse.json(
+          { error: "Kelompok tidak ditemukan." },
+          { status: 404 }
+        );
+      }
+
+      assertGroupAccess(currentUser, group, "manage");
+      assertGroupMutable(group);
+
+      await tx.group.update({
+        where: { id },
+        data: {
+          status: "DELETED",
+        },
+      });
+
+      await tx.activityLog.create({
+        data: {
+          actorId: currentUser.userId,
+          action: "DELETE",
+          entityType: "GROUP",
+          entityId: id,
+          description: `Menghapus kelompok ${group.name}.`,
+        },
+      });
+
+      return ok({ success: true });
+    });
   } catch (error) {
     return apiError(error);
   }
