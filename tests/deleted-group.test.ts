@@ -18,7 +18,7 @@ const db = {
   userGroup: { findMany: async () => [{ id: "assignment", userId: "musyrif" }], create: write("assignment.create"), delete: write("assignment.delete") },
   groupAssignmentHistory: { create: write("history") },
   attendanceSession: { findFirst: async () => ({ id: "a1", meetingNumber: 1, group: group() }), create: write("session.create"), updateMany: async () => { mutations.push("session.lock"); return { count: 1 }; }, update: write("session.update") },
-  attendanceRecord: { findMany: async () => [], upsert: write("record") },
+  attendanceRecord: { findMany: async () => [], createMany: write("record") },
   activityLog: { create: write("log") },
 };
 const prismaPath = require.resolve("../src/lib/prisma"); require(prismaPath);

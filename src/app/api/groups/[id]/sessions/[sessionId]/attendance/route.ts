@@ -12,13 +12,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const currentUser = await requireAuth();
     const { id: groupId, sessionId } = await params;
     const input = attendanceBatchSchema.parse(await request.json());
+    const memberIds = input.records.map((record) => record.memberId);
     return await prisma.$transaction(async (tx) => {
       await lockGroup(tx, groupId);
       const session = await tx.attendanceSession.findFirst({ where: { id: sessionId, groupId }, include: { group: { include: { sector: { include: { mahalli: true } }, userGroups: true } } } });
       if (!session) return NextResponse.json({ error: "Pertemuan tidak ditemukan." }, { status: 404 });
       assertMeetingAccess(currentUser, session.group);
       assertGroupMutable(session.group);
-      const members = await tx.member.findMany({ where: { groupId, id: { in: input.records.map((record) => record.memberId) } }, select: { id: true } });
+      const members = await tx.member.findMany({ where: { groupId, id: { in: memberIds } }, select: { id: true } });
       if (members.length !== input.records.length) return NextResponse.json({ error: "Anggota tidak ditemukan atau bukan anggota kelompok ini." }, { status: 400 });
       // A conditional write locks the session until commit, including no-op batches.
       const locked = await tx.attendanceSession.updateMany({ where: { id: sessionId, groupId, attendanceVersion: input.expectedVersion }, data: { attendanceVersion: input.expectedVersion } });
@@ -26,15 +27,31 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const current = await tx.attendanceSession.findUnique({ where: { id: sessionId }, select: { attendanceVersion: true } });
         return NextResponse.json({ error: "Presensi telah berubah. Muat ulang data sebelum menyimpan kembali.", code: "ATTENDANCE_VERSION_CONFLICT", expectedVersion: input.expectedVersion, currentVersion: current?.attendanceVersion ?? null }, { status: 409 });
       }
-      const previous = await tx.attendanceRecord.findMany({ where: { sessionId }, select: { memberId: true, status: true, reason: true } });
+      const previous = await tx.attendanceRecord.findMany({ where: { sessionId, memberId: { in: memberIds } }, select: { memberId: true, status: true, reason: true } });
       const previousByMember = new Map(previous.map((record) => [record.memberId, record]));
       const changes = [];
+      const creates: Prisma.AttendanceRecordCreateManyInput[] = [];
+      const updates = new Map<string, { memberIds: string[]; status: typeof input.records[number]["status"]; reason: string | null }>();
       for (const record of input.records) {
         const before = previousByMember.get(record.memberId);
         const data = { status: record.status, reason: record.reason || null };
         if (before && before.status === data.status && before.reason === data.reason) continue;
         changes.push({ memberId: record.memberId, before: before ? { status: before.status } : null, after: { status: data.status }, reasonChanged: (before?.reason ?? null) !== data.reason });
-        await tx.attendanceRecord.upsert({ where: { sessionId_memberId: { sessionId, memberId: record.memberId } }, create: { sessionId, memberId: record.memberId, ...data }, update: data });
+        if (!before) {
+          creates.push({ sessionId, memberId: record.memberId, ...data });
+        } else {
+          const key = JSON.stringify([data.status, data.reason]);
+          const batch = updates.get(key) ?? { memberIds: [], ...data };
+          batch.memberIds.push(record.memberId);
+          updates.set(key, batch);
+        }
+      }
+      // One transaction connection executes queries serially; batch equal writes instead
+      // of issuing an upsert per member (Promise.all would not remove round trips).
+      if (creates.length) await tx.attendanceRecord.createMany({ data: creates });
+      for (const { memberIds, ...data } of updates.values()) {
+        const updated = await tx.attendanceRecord.updateMany({ where: { sessionId, memberId: { in: memberIds } }, data });
+        if (updated.count !== memberIds.length) throw new Error("Data presensi berubah. Silakan muat ulang dan coba kembali.");
       }
       const attendanceVersion = input.expectedVersion + (changes.length ? 1 : 0);
       if (changes.length) {
@@ -42,7 +59,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "UPDATE", entityType: "ATTENDANCE_SESSION", entityId: sessionId, description: `Menyimpan ${changes.length} perubahan presensi pada pertemuan ${session.meetingNumber} kelompok ${session.group.name}.`, metadata: { groupId, versionBefore: input.expectedVersion, versionAfter: attendanceVersion, changes } } });
       }
       return ok({ success: true, attendanceVersion, changedCount: changes.length });
-    }, { isolationLevel: "ReadCommitted" });
+    }, { isolationLevel: "ReadCommitted", timeout: 15_000 });
   } catch (error) {
     if (error instanceof SyntaxError) return NextResponse.json({ error: "Data presensi tidak valid." }, { status: 400 });
     if (error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientUnknownRequestError || error instanceof Prisma.PrismaClientInitializationError || error instanceof Prisma.PrismaClientValidationError) {

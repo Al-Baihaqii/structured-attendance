@@ -11,6 +11,7 @@ let allowed: boolean;
 let sessionExists: boolean;
 let memberExists: boolean;
 let writes: number;
+let writeQueries: number;
 let events: string[];
 let groupStatus: string;
 let cityId: string;
@@ -27,12 +28,29 @@ const tx = {
   },
   member: { findMany: async ({ where }: any) => memberExists ? where.id.in.map((id: string) => ({ id })) : [] },
   attendanceRecord: {
-    findMany: async () => structuredClone(rows),
-    upsert: async ({ create, update }: any) => {
-      writes++;
+    findMany: async ({ where }: any) => {
+      assert.equal(where.sessionId, "a1");
+      assert.ok(Array.isArray(where.memberId.in));
+      return structuredClone(rows.filter(row => where.memberId.in.includes(row.memberId)));
+    },
+    createMany: async ({ data }: any) => {
+      writeQueries++;
       if (failWrite) throw new Error("test write failed");
-      const found = rows.find((row) => row.memberId === create.memberId);
-      if (found) Object.assign(found, update); else rows.push({ memberId: create.memberId, status: create.status, reason: create.reason });
+      for (const record of data) {
+        assert.equal(record.sessionId, "a1");
+        assert.ok(!rows.some(row => row.memberId === record.memberId));
+        rows.push({ memberId: record.memberId, status: record.status, reason: record.reason });
+        writes++;
+      }
+      return { count: data.length };
+    },
+    updateMany: async ({ where, data }: any) => {
+      writeQueries++;
+      if (failWrite) throw new Error("test write failed");
+      assert.equal(where.sessionId, "a1");
+      const matching = rows.filter(row => where.memberId.in.includes(row.memberId));
+      for (const row of matching) { Object.assign(row, data); writes++; }
+      return { count: matching.length };
     },
   },
   activityLog: { create: async ({ data }: any) => { if (failLog) throw new Error("test log failed"); logs.push(data); } },
@@ -41,6 +59,7 @@ const prismaPath = require.resolve("../src/lib/prisma");
 require(prismaPath);
 require.cache[prismaPath]!.exports = { prisma: { $transaction: async (fn: any, options: any) => {
   assert.equal(options.isolationLevel, "ReadCommitted");
+  assert.equal(options.timeout, 15_000);
   const snapshot = structuredClone({ version, rows, logs });
   try { const result = await fn(tx); events.push("commit"); onCommit?.(); return result; } catch (error) { ({ version, rows, logs } = snapshot); throw error; }
 } } };
@@ -48,7 +67,7 @@ const authPath = require.resolve("../src/lib/auth");
 require(authPath);
 require.cache[authPath]!.exports = { requireAuth: async () => user };
 const { PATCH } = require("../src/app/api/groups/[id]/sessions/[sessionId]/attendance/route") as typeof import("../src/app/api/groups/[id]/sessions/[sessionId]/attendance/route");
-beforeEach(() => { events = []; groupStatus = "ACTIVE"; cityId = "c1"; user = { userId: "u1", role: "MUSYRIF" }; onLock = undefined; onCommit = undefined; version = 0; rows = []; logs = []; writes = 0; failLog = false; failWrite = false; allowed = true; sessionExists = true; memberExists = true; });
+beforeEach(() => { events = []; groupStatus = "ACTIVE"; cityId = "c1"; user = { userId: "u1", role: "MUSYRIF" }; onLock = undefined; onCommit = undefined; version = 0; rows = []; logs = []; writes = 0; writeQueries = 0; failLog = false; failWrite = false; allowed = true; sessionExists = true; memberExists = true; });
 const save = (expectedVersion: number, records = [{ memberId: "m1", status: "HADIR", reason: "" }]) => PATCH(new Request("http://localhost/api/groups/g1/sessions/a1/attendance", { method: "PATCH", body: JSON.stringify({ expectedVersion, records }) }), { params: Promise.resolve({ id: "g1", sessionId: "a1" }) });
 
 test("changed batch increments version once and records only actual changes without reason text", async () => {
@@ -130,3 +149,43 @@ for (const change of ["delete", "transfer", "revoke"] as const) {
     assert.equal(version, 1); assert.equal(logs.length, 1); assert.equal(writes, 1);
   });
 }
+
+
+test("large first save uses one bulk insert and one version/log change", async () => {
+  const records = Array.from({ length: 100 }, (_, i) => ({ memberId: `m${i}`, status: "HADIR", reason: "" }));
+  assert.equal((await save(0, records)).status, 200);
+  assert.equal(rows.length, 100); assert.equal(writeQueries, 1);
+  assert.equal(version, 1); assert.equal(logs.length, 1);
+  assert.equal(logs[0].metadata.changes.length, 100);
+});
+
+test("partial mixed batch groups equal updates and preserves distinct reasons and omitted records", async () => {
+  rows = ["m1", "m2", "m3", "m4", "omitted"].map(memberId => ({ memberId, status: "HADIR", reason: null }));
+  const records = [
+    { memberId: "m1", status: "IZIN", reason: "same reason" },
+    { memberId: "m2", status: "IZIN", reason: "same reason" },
+    { memberId: "m3", status: "IZIN", reason: "different reason" },
+    { memberId: "m4", status: "HADIR", reason: "" },
+    { memberId: "new", status: "SAKIT", reason: "" },
+  ];
+  const response = await save(0, records);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).changedCount, 4);
+  assert.equal(writeQueries, 3); // One insert, two distinct update payloads.
+  assert.deepEqual(rows.find(row => row.memberId === "omitted"), { memberId: "omitted", status: "HADIR", reason: null });
+  assert.equal(rows.find(row => row.memberId === "m3")?.reason, "different reason");
+  assert.equal(JSON.stringify(logs).includes("same reason"), false);
+  assert.equal(JSON.stringify(logs).includes("different reason"), false);
+});
+
+test("log failure rolls back both bulk inserts and grouped updates", async () => {
+  rows = [{ memberId: "m1", status: "HADIR", reason: null }];
+  const before = structuredClone(rows);
+  failLog = true;
+  assert.notEqual((await save(0, [
+    { memberId: "m1", status: "IZIN", reason: "private" },
+    { memberId: "new", status: "HADIR", reason: "" },
+  ])).status, 200);
+  assert.equal(writeQueries, 2);
+  assert.deepEqual(rows, before); assert.equal(version, 0); assert.deepEqual(logs, []);
+});
