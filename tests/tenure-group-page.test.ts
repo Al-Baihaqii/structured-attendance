@@ -24,7 +24,7 @@ for (const role of ["MAHALLI_ADMIN", "SECTOR_ADMIN", "SUPER_ADMIN"]) {
   test(`${role} picker requests active city Musyrifs without lower scope restrictions`, async () => {
     user.role = role; await page();
     assert.deepEqual(candidateQuery.where, { role: "MUSYRIF", isActive: true, cityId: "c1" });
-    assert.equal("userGroups" in groupQuery.include, false);
+    assert.ok(groupQuery.include.assignments);
   });
 }
 test("Musyrif workspace filters active tenure; history filters closed tenure and disables creation", async () => {

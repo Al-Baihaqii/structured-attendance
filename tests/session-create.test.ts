@@ -74,8 +74,8 @@ test("concurrent meeting creation allocates consecutive group numbers", async ()
   assert.ok(sessions.every(s => s.assignmentId === "t1"));
   assert.equal(logs.length, 2);
 });
-test("new tenure continues numbering across old and unattributed sessions", async () => {
-  sessions = [{ groupId: "g1", meetingNumber: 17, assignmentId: null }];
+test("new tenure continues numbering across previous tenure sessions", async () => {
+  sessions = [{ groupId: "g1", meetingNumber: 17, assignmentId: "previous-tenure" }];
   assert.equal((await call()).status, 201);
   assert.equal(sessions[1].meetingNumber, 18);
   assert.equal(sessions[1].assignmentId, "t1");
@@ -101,9 +101,8 @@ test("missing group returns 404 without writes", async () => {
   group = null; assert.equal((await call()).status, 404); assert.deepEqual(sessions, []); assert.deepEqual(logs, []);
 });
 
-test("legacy mirror cannot grant meeting creation when the active tenure belongs to another Musyrif", async () => {
+test("meeting creation is rejected when the active tenure belongs to another Musyrif", async () => {
   user.role = "MUSYRIF";
-  group.userGroups = [{ userId: "u1" }];
   group.assignments[0].musyrifId = "replacement";
   assert.equal((await call()).status, 403);
   assert.deepEqual(sessions, []); assert.deepEqual(logs, []);

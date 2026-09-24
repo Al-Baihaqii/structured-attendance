@@ -39,6 +39,11 @@ export function canCreateUserRole(
   },
 ) {
   if (currentUser.role === "SUPER_ADMIN") return true;
+  // City-owned accounts must not become manageable through stale legacy lower scopes.
+  if (targetRole === "MUSYRIF") {
+    return currentUser.role === "CITY_ADMIN" && Boolean(currentUser.cityId) && targetScope.cityId === currentUser.cityId;
+  }
+
 
   if (currentUser.role === "CITY_ADMIN") {
     return (
@@ -55,7 +60,7 @@ export function canCreateUserRole(
   }
 
   if (currentUser.role === "SECTOR_ADMIN") {
-    return targetRole === "MUSYRIF" && Boolean(currentUser.sectorId) && targetScope.sectorId === currentUser.sectorId;
+    return false;
   }
 
   return false;

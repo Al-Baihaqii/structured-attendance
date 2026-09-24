@@ -9,6 +9,8 @@ const prismaPath = require.resolve("../src/lib/prisma");
 require(prismaPath);
 const unexpected = async () => { throw new Error("Unexpected database call in test"); };
 const prismaMethods = {
+  $queryRaw: async () => [],
+  groupAssignment: { count: async () => 0 },
   user: { findUnique: unexpected, update: unexpected, create: unexpected },
   activityLog: { create: unexpected },
   sector: { findUnique: unexpected },
@@ -134,4 +136,10 @@ test("Musyrif outside city rejected and lower admins do not gain city-wide user 
     assert.equal((await create()).status, 403);
   }
   assert.equal(writes.length, 0);
+});
+
+test("legacy lower scope cannot grant management of a city-owned Musyrif account", () => {
+  for (const role of ["MAHALLI_ADMIN", "SECTOR_ADMIN"] as const) {
+    assert.equal(canCreateUserRole({ ...actor, role, mahalliId: "m1", sectorId: "s1" }, "MUSYRIF", { cityId: "c1", mahalliId: "m1", sectorId: "s1" }), false);
+  }
 });

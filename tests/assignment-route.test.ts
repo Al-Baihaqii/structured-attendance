@@ -7,6 +7,7 @@ let state: any;
 let actor: any;
 let fail: string;
 let tail: Promise<void>;
+let onUserLock: (() => void) | undefined;
 let onLock: (() => void) | undefined;
 const sector = (id: string) => ({ id, mahalliId: "h1", mahalli: { cityId: "c1", city: { id: "c1" } } });
 // Model a transaction-scoped row mutex, with state read only after acquisition.
@@ -18,6 +19,10 @@ const prisma = { $transaction: async (fn: any, options: any) => {
   try {
     const result = await fn({
       $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        if (strings.join("?").includes('FROM "User"')) {
+          checked(); onUserLock?.(); onUserLock = undefined;
+          return [{ id: values[0] }];
+        }
         assert.match(strings.join("?"), /SELECT "id" FROM "Group" WHERE "id" = \? FOR UPDATE/);
         assert.deepEqual(values, [state.group.id]);
         const previous = tail;
@@ -38,12 +43,6 @@ const prisma = { $transaction: async (fn: any, options: any) => {
         update: async ({ where, data }: any) => Object.assign(checked().tenures.find((row: any) => row.id === where.id), data),
         create: async ({ data }: any) => { const row = { id: `t${checked().tenures.length}`, endedAt: null, ...data }; checked().tenures.push(row); return row; },
       },
-      userGroup: {
-        deleteMany: async ({ where }: any) => { const before = checked().rows.length; checked().rows = checked().rows.filter((row: any) => row.groupId !== where.groupId); return { count: before - checked().rows.length }; },
-        findMany: async () => checked().rows.map((row: any) => ({ ...row, user: { sectorId: "s1" } })),
-        delete: async ({ where }: any) => { checked().rows = checked().rows.filter((r: any) => r.id !== where.id); },
-        create: async ({ data }: any) => { checked().rows.push({ id: data.userId, ...data }); },
-      },
       groupAssignmentHistory: { create: async ({ data }: any) => { if (fail === "history") throw new Error("History failure"); checked().history.push(data); } },
       activityLog: { create: async ({ data }: any) => { if (fail === "log") throw new Error("Log failure"); checked().logs.push(data); } },
     });
@@ -61,13 +60,13 @@ const call = (handler = POST, body: any = { musyrifId: "m1" }, groupId = "g1") =
 beforeEach(() => {
   state = { group: { id: "g1", name: "Group", sectorId: "s1", status: "ACTIVE" }, rows: [], tenures: [], history: [], logs: [] };
   actor = { userId: "admin", role: "CITY_ADMIN", cityId: "c1" };
-  fail = ""; tail = Promise.resolve(); onLock = undefined;
+  fail = ""; tail = Promise.resolve(); onLock = undefined; onUserLock = undefined;
 });
 test("concurrent POSTs serialize into normal replacement with accurate history", async () => {
   const responses = await Promise.all([call(), call(POST, { musyrifId: "m2" })]);
   assert.deepEqual(responses.map(r => r.status), [200, 200]);
-  assert.equal(state.rows.length, 1);
-  assert.equal(state.rows[0].userId, "m2");
+  assert.equal(activeTenures().length, 1);
+  assert.equal(activeTenures()[0].musyrifId, "m2");
   assert.equal(state.history[1].oldMusyrifId, "m1");
   assert.equal(state.logs.length, 2);
 });
@@ -75,15 +74,15 @@ test("concurrent DELETEs revoke once and then return a no-op", async () => {
   await call();
   const responses = await Promise.all([call(DELETE), call(DELETE)]);
   assert.deepEqual(responses.map(r => r.status), [200, 200]);
-  assert.equal(state.rows.length, 0);
+  assert.equal(activeTenures().length, 0);
   assert.equal(state.history.length, 2);
   assert.equal(state.logs.length, 2);
 });
 test("POST and DELETE serialize without leaving an extra assignment", async () => {
   assert.deepEqual((await Promise.all([call(), call(DELETE)])).map(r => r.status), [200, 200]);
-  assert.ok(state.rows.length <= 1);
+  assert.ok(activeTenures().length <= 1);
   const last = state.history.at(-1);
-  assert.equal(state.rows[0]?.userId, last.newMusyrifId);
+  assert.equal(activeTenures()[0]?.musyrifId, last.newMusyrifId);
   assert.equal(state.logs.length, state.history.length);
 });
 for (const handler of [POST, DELETE]) {
@@ -124,20 +123,20 @@ test("assignment first allows same-city transfer retaining tenure", async () => 
   const responses = await Promise.all([call(), call(PATCH, { sectorId: "s2" })]);
   assert.deepEqual(responses.map(r => r.status), [200, 200]);
   assert.equal(state.group.sectorId, "s2");
-  assert.equal(state.rows.length, 1);
+  assert.equal(activeTenures().length, 1);
   assert.equal(state.logs.length, 2);
 });
 test("transfer first allows assignment in another sector of the same city", async () => {
   const responses = await Promise.all([call(PATCH, { sectorId: "s2" }), call()]);
   assert.deepEqual(responses.map(r => r.status), [200, 200]);
   assert.equal(state.group.sectorId, "s2");
-  assert.equal(state.rows.length, 1);
+  assert.equal(activeTenures().length, 1);
   assert.equal(state.logs.length, 2);
 });
 test("SUPER_ADMIN retains cross-sector assignment flexibility", async () => {
   actor.role = "SUPER_ADMIN"; state.group.sectorId = "s2";
   assert.equal((await call()).status, 200);
-  assert.equal(state.rows.length, 1);
+  assert.equal(activeTenures().length, 1);
 });
 
 
@@ -158,18 +157,24 @@ test("SUPER_ADMIN cannot assign across cities", async () => {
   assert.deepEqual(state.tenures, []); assert.deepEqual(state.logs, []);
 });
 
-test("one Musyrif retains simultaneous tenures and mirrors in multiple same-city groups", async () => {
+test("one Musyrif retains simultaneous tenures in multiple same-city groups", async () => {
   assert.equal((await call()).status, 200);
   state.group.id = "g2";
   assert.equal((await call(POST, { musyrifId: "m1" }, "g2")).status, 200);
   assert.equal(state.tenures.filter((row: any) => row.musyrifId === "m1" && row.endedAt === null).length, 2);
-  assert.deepEqual(state.rows.map((row: any) => row.groupId).sort(), ["g1", "g2"]);
+  assert.deepEqual(activeTenures().map((row: any) => row.groupId).sort(), ["g1", "g2"]);
 });
 
-test("revoking a legacy-only mirror logs cleanup without fabricating tenure history", async () => {
-  state.rows = [{ id: "legacy", userId: "m1", groupId: "g1" }];
+test("revocation without an active tenure leaves state unchanged", async () => {
+  const before = structuredClone(state);
   assert.equal((await call(DELETE)).status, 200);
-  assert.deepEqual(state.rows, []); assert.deepEqual(state.tenures, []);
-  assert.equal(state.logs.length, 1);
-  assert.equal(state.logs[0].metadata.legacyAssignmentsRemoved, 1);
+  assert.deepEqual(state, before);
 });
+
+test("city change committed before user lock is rechecked before assigning", async () => {
+  onUserLock = () => { fail = "city"; };
+  assert.equal((await call()).status, 400);
+  assert.deepEqual(state.tenures, []); assert.deepEqual(state.logs, []);
+});
+
+function activeTenures() { return state.tenures.filter((row: any) => row.endedAt === null); }

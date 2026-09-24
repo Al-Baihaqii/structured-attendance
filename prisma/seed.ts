@@ -1,4 +1,6 @@
 import { PrismaClient, Role, GroupStatus } from "@prisma/client";
+import { ensureSeedAssignment } from "./seed-assignment";
+import { lockUser } from "../src/lib/user-lock";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -20,29 +22,41 @@ async function upsertUser(input: {
   sectorId?: string;
 }) {
   const passwordHash = await bcrypt.hash(input.password, 12);
-  return prisma.user.upsert({
-    where: { username: input.username },
-    update: {
-      name: input.name,
-      email: input.email,
-      passwordHash,
-      role: input.role,
-      isActive: true,
-      cityId: input.cityId,
-      mahalliId: input.mahalliId,
-      sectorId: input.sectorId,
-    },
-    create: {
-      username: input.username,
-      name: input.name,
-      email: input.email,
-      passwordHash,
-      role: input.role,
-      cityId: input.cityId,
-      mahalliId: input.mahalliId,
-      sectorId: input.sectorId,
-    },
-  });
+  if (input.role === "MUSYRIF" && !input.cityId) throw new Error("Musyrif seed harus memiliki kota.");
+  return prisma.$transaction(async tx => {
+    const existing = await tx.user.findUnique({ where: { username: input.username } });
+    if (existing) {
+      await lockUser(tx, existing.id);
+      const locked = await tx.user.findUniqueOrThrow({ where: { id: existing.id } });
+      if ((locked.role !== input.role || locked.cityId !== (input.cityId ?? null))
+        && await tx.groupAssignment.count({ where: { musyrifId: locked.id, endedAt: null } })) {
+        throw new Error("Seed tidak boleh mengubah kota/peran pengguna dengan penugasan aktif.");
+      }
+    }
+    return tx.user.upsert({
+      where: { username: input.username },
+      update: {
+        name: input.name,
+        email: input.email,
+        passwordHash,
+        role: input.role,
+        isActive: true,
+        cityId: input.cityId ?? null,
+        mahalliId: input.role === "MUSYRIF" ? null : input.mahalliId ?? null,
+        sectorId: input.role === "MUSYRIF" ? null : input.sectorId ?? null,
+      },
+      create: {
+        username: input.username,
+        name: input.name,
+        email: input.email,
+        passwordHash,
+        role: input.role,
+        cityId: input.cityId ?? null,
+        mahalliId: input.role === "MUSYRIF" ? null : input.mahalliId ?? null,
+        sectorId: input.role === "MUSYRIF" ? null : input.sectorId ?? null,
+      },
+    });
+  }, { isolationLevel: "ReadCommitted" });
 }
 
 async function main() {
@@ -111,15 +125,9 @@ async function main() {
     password: seedPassword,
     role: "MUSYRIF",
     cityId: city.id,
-    mahalliId: mahalli.id,
-    sectorId: sector.id,
   });
 
-  await prisma.userGroup.upsert({
-    where: { userId_groupId: { userId: musyrif.id, groupId: group.id } },
-    update: {},
-    create: { userId: musyrif.id, groupId: group.id },
-  });
+  await prisma.$transaction(tx => ensureSeedAssignment(tx, group.id, musyrif.id), { isolationLevel: "ReadCommitted" });
 
   const demoMembers = ["Budi Santoso", "Dimas Pratama", "Rizky Maulana", "Fajar Hidayat", "Ilham Ramadhan"];
   for (const name of demoMembers) {

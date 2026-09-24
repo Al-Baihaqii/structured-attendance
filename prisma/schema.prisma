@@ -44,7 +44,6 @@ model User {
   city               City?                    @relation(fields: [cityId], references: [id], onDelete: SetNull)
   mahalli            Mahalli?                 @relation(fields: [mahalliId], references: [id], onDelete: SetNull)
   sector             Sector?                  @relation(fields: [sectorId], references: [id], onDelete: SetNull)
-  userGroups         UserGroup[]
   assignments        GroupAssignment[]
   changedAssignments GroupAssignmentHistory[] @relation("AssignmentChanger")
   activityLogs       ActivityLog[]
@@ -104,7 +103,6 @@ model Group {
   sector             Sector                   @relation(fields: [sectorId], references: [id], onDelete: Cascade)
   status             GroupStatus              @default(ACTIVE)
   members            Member[]
-  userGroups         UserGroup[]
   assignments        GroupAssignment[]
   attendanceSessions AttendanceSession[]
   assignmentHistory  GroupAssignmentHistory[]
@@ -114,18 +112,6 @@ model Group {
   @@unique([sectorId, name])
   @@index([sectorId])
   @@index([status])
-}
-
-model UserGroup {
-  id        String   @id @default(cuid())
-  userId    String
-  groupId   String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@unique([userId, groupId])
-  @@index([groupId])
 }
 
 model GroupAssignment {
@@ -193,13 +179,13 @@ model ActivityLog {
 model AttendanceSession {
   id                String             @id @default(cuid())
   groupId           String
-  assignmentId      String?
+  assignmentId      String
   meetingNumber     Int
   attendanceVersion Int                @default(0)
   date              DateTime
   notes             String?
   group             Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  assignment        GroupAssignment?   @relation(fields: [assignmentId, groupId], references: [id, groupId], onDelete: Restrict, onUpdate: Restrict)
+  assignment        GroupAssignment    @relation(fields: [assignmentId, groupId], references: [id, groupId], onDelete: Restrict, onUpdate: Restrict)
   records           AttendanceRecord[]
   createdAt         DateTime           @default(now())
 

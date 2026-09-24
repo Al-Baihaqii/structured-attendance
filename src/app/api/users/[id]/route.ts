@@ -4,6 +4,7 @@ import { hashPassword, requireAuth } from "@/lib/auth";
 import { canCreateUserRole, requireRole } from "@/lib/authorization";
 import { apiError, ok } from "@/lib/api";
 import { userSchema } from "@/lib/validators";
+import { lockUser } from "@/lib/user-lock";
 import { validateUserScope } from "@/lib/user-scope";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -36,6 +37,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     const passwordHash = input.password ? await hashPassword(input.password) : undefined;
     return await prisma.$transaction(async (tx) => {
+      await lockUser(tx, id);
+      const locked = await tx.user.findUnique({ where: { id } });
+      if (!locked) return NextResponse.json({ error: "Pengguna tidak ditemukan." }, { status: 404 });
+      // Do not apply authorization computed for a target whose scope changed while waiting.
+      if (locked.role !== existing.role || locked.cityId !== existing.cityId || locked.mahalliId !== existing.mahalliId || locked.sectorId !== existing.sectorId) {
+        return NextResponse.json({ error: "Data pengguna berubah. Muat ulang sebelum menyimpan.", code: "USER_SCOPE_CONFLICT" }, { status: 409 });
+      }
+      if ((role !== locked.role || scope.cityId !== locked.cityId)
+        && await tx.groupAssignment.count({ where: { musyrifId: id, endedAt: null } })) {
+        return activeAssignmentsConflict();
+      }
       const updated = await tx.user.update({
         where: { id, role: existing.role, cityId: existing.cityId, mahalliId: existing.mahalliId, sectorId: existing.sectorId },
         data: {
@@ -43,13 +55,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           name: input.name,
           email: input.email === "" ? null : input.email,
           ...(!isSelf ? { role, ...scope } : {}),
+          ...(role === "MUSYRIF" ? { cityId: scope.cityId, mahalliId: null, sectorId: null } : {}),
           ...(input.password ? { passwordHash: passwordHash, sessionVersion: { increment: 1 } } : {}),
         },
         select: { id: true, username: true, name: true, role: true, isActive: true },
       });
       await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "UPDATE", entityType: "USER", entityId: id, description: `Memperbarui pengguna ${updated.name}.` } });
       return ok({ user: updated });
-    });
+    }, { isolationLevel: "ReadCommitted" });
   } catch (error) {
     return apiError(error);
   }
@@ -70,6 +83,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
         );
       }
 
+      await lockUser(tx, id);
       const user = await tx.user.findUnique({
         where: { id },
       });
@@ -92,6 +106,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
         return ok({ success: true });
       }
 
+      if (await tx.groupAssignment.count({ where: { musyrifId: id, endedAt: null } })) return activeAssignmentsConflict();
       await tx.user.update({
         where: {
           id,
@@ -116,8 +131,12 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       });
 
       return ok({ success: true });
-    });
+    }, { isolationLevel: "ReadCommitted" });
   } catch (error) {
     return apiError(error);
   }
+}
+
+function activeAssignmentsConflict() {
+  return NextResponse.json({ error: "Cabut semua penugasan aktif sebelum mengubah kota/peran atau menonaktifkan Musyrif.", code: "USER_ACTIVE_ASSIGNMENTS" }, { status: 409 });
 }

@@ -67,7 +67,7 @@ test("session tenure ownership is independent of current group assignment", () =
   assert.doesNotThrow(() => assertSessionAccess(user({ role: "CITY_ADMIN" }), session, "manage"));
   assert.equal(canEditSession(replacement, { ...session, assignment: active, group: { ...g, status: "DELETED" } }), false);
 });
-test("legacy UserGroup cannot grant access after the tenure cutover", () => {
-  const g = { ...group(), userGroups: [{ userId: "u-1" }], assignments: [] };
+test("Musyrif without any tenure cannot access a group", () => {
+  const g = { ...group(), assignments: [] };
   assert.equal(canViewGroup(user({}), g), false);
 });
