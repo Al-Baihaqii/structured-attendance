@@ -45,6 +45,7 @@ model User {
   mahalli            Mahalli?                 @relation(fields: [mahalliId], references: [id], onDelete: SetNull)
   sector             Sector?                  @relation(fields: [sectorId], references: [id], onDelete: SetNull)
   userGroups         UserGroup[]
+  assignments        GroupAssignment[]
   changedAssignments GroupAssignmentHistory[] @relation("AssignmentChanger")
   activityLogs       ActivityLog[]
   createdAt          DateTime                 @default(now())
@@ -104,6 +105,7 @@ model Group {
   status             GroupStatus              @default(ACTIVE)
   members            Member[]
   userGroups         UserGroup[]
+  assignments        GroupAssignment[]
   attendanceSessions AttendanceSession[]
   assignmentHistory  GroupAssignmentHistory[]
   createdAt          DateTime                 @default(now())
@@ -124,6 +126,23 @@ model UserGroup {
 
   @@unique([userId, groupId])
   @@index([groupId])
+}
+
+model GroupAssignment {
+  id                 String              @id @default(cuid())
+  groupId            String
+  musyrifId          String
+  startedAt          DateTime            @default(now())
+  endedAt            DateTime?
+  group              Group               @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  musyrif            User                @relation(fields: [musyrifId], references: [id], onDelete: Restrict)
+  attendanceSessions AttendanceSession[]
+
+  // Composite key ensures sessions reference an assignment in their own group.
+  @@unique([id, groupId])
+  @@index([musyrifId, endedAt])
+  @@index([groupId, startedAt])
+  // SQL migration enforces one active assignment per group and valid tenure dates.
 }
 
 model Member {
@@ -174,16 +193,19 @@ model ActivityLog {
 model AttendanceSession {
   id                String             @id @default(cuid())
   groupId           String
+  assignmentId      String?
   meetingNumber     Int
   attendanceVersion Int                @default(0)
   date              DateTime
   notes             String?
   group             Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  assignment        GroupAssignment?   @relation(fields: [assignmentId, groupId], references: [id, groupId], onDelete: Restrict, onUpdate: Restrict)
   records           AttendanceRecord[]
   createdAt         DateTime           @default(now())
 
   @@unique([groupId, meetingNumber])
   @@index([groupId])
+  @@index([assignmentId, date])
 }
 
 model AttendanceRecord {
