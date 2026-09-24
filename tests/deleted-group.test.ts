@@ -11,7 +11,8 @@ let mutations: string[];
 const group = () => ({ id: "g1", name: "Group", status, sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, assignments: [{ id: "t1", musyrifId: "u1", endedAt: null }], assignmentHistory: [{ id: "history1" }] });
 const write = (name: string) => async ({ data }: any = {}) => { mutations.push(name); return { id: "result", ...data }; };
 const db = {
-  $queryRaw: async () => [],
+  $queryRaw: async (strings: TemplateStringsArray) => strings.join("?").includes('FROM "User"')
+    ? [{ id: "musyrif", name: "Musyrif", role: "MUSYRIF", isActive: true, cityId: "c1" }] : [],
   group: { findUnique: async () => group(), update: write("group") },
   member: { findUnique: async () => ({ id: "m1", groupId: "g1", name: "Original", group: group() }), findMany: async () => [{ id: "m1" }], create: write("member.create"), update: write("member.update"), updateMany: async () => { mutations.push("member.update"); return { count: 1 }; } },
   user: { findUnique: async () => ({ id: "musyrif", name: "Musyrif", role: "MUSYRIF", isActive: true, cityId: "c1", sectorId: "s1" }) },

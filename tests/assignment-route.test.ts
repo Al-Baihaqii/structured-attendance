@@ -3,6 +3,7 @@ import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
+let transactionOptions: any[];
 let state: any;
 let actor: any;
 let fail: string;
@@ -13,6 +14,7 @@ const sector = (id: string) => ({ id, mahalliId: "h1", mahalli: { cityId: "c1", 
 // Model a transaction-scoped row mutex, with state read only after acquisition.
 const prisma = { $transaction: async (fn: any, options: any) => {
   assert.equal(options.isolationLevel, "ReadCommitted");
+  transactionOptions.push(options);
   let release: (() => void) | undefined;
   let draft: any;
   const checked = () => { assert.ok(draft, "database access must follow lock acquisition"); return draft; };
@@ -21,7 +23,10 @@ const prisma = { $transaction: async (fn: any, options: any) => {
       $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
         if (strings.join("?").includes('FROM "User"')) {
           checked(); onUserLock?.(); onUserLock = undefined;
-          return [{ id: values[0] }];
+          assert.match(strings.join("?"), /FOR UPDATE/);
+          assert.match(strings.join("?"), /SELECT "id", "name", "role", "isActive", "cityId"/);
+          if (fail === "missing-user") return [];
+          return [{ id: values[0], name: values[0], role: fail === "role" ? "CITY_ADMIN" : "MUSYRIF", isActive: fail !== "inactive", cityId: fail === "city" ? "c2" : "c1" }];
         }
         assert.match(strings.join("?"), /SELECT "id" FROM "Group" WHERE "id" = \? FOR UPDATE/);
         assert.deepEqual(values, [state.group.id]);
@@ -37,7 +42,7 @@ const prisma = { $transaction: async (fn: any, options: any) => {
         update: async ({ data }: any) => { Object.assign(checked().group, Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined))); return checked().group; },
       },
       sector: { findUnique: async ({ where }: any) => { checked(); return sector(where.id); } },
-      user: { findUnique: async ({ where }: any) => { checked(); return { id: where.id, name: where.id, role: "MUSYRIF", isActive: true, cityId: fail === "city" ? "c2" : "c1", sectorId: "s1" }; } },
+      user: { findUnique: async () => { throw new Error("Assignment must read the candidate from the locked row"); } },
       groupAssignment: {
         findMany: async ({ where }: any) => checked().tenures.filter((row: any) => row.groupId === where.groupId && row.endedAt === null),
         update: async ({ where, data }: any) => Object.assign(checked().tenures.find((row: any) => row.id === where.id), data),
@@ -60,6 +65,7 @@ const call = (handler = POST, body: any = { musyrifId: "m1" }, groupId = "g1") =
 beforeEach(() => {
   state = { group: { id: "g1", name: "Group", sectorId: "s1", status: "ACTIVE" }, rows: [], tenures: [], history: [], logs: [] };
   actor = { userId: "admin", role: "CITY_ADMIN", cityId: "c1" };
+  transactionOptions = [];
   fail = ""; tail = Promise.resolve(); onLock = undefined; onUserLock = undefined;
 });
 test("concurrent POSTs serialize into normal replacement with accurate history", async () => {
@@ -178,3 +184,18 @@ test("city change committed before user lock is rechecked before assigning", asy
 });
 
 function activeTenures() { return state.tenures.filter((row: any) => row.endedAt === null); }
+
+for (const handler of [POST, DELETE]) {
+  test(`${handler.name}: uses explicit 15 second transaction lifetime`, async () => {
+    assert.equal((await call(handler)).status, 200);
+    assert.equal(transactionOptions[0].timeout, 15_000);
+  });
+}
+for (const failure of ["missing-user", "inactive", "role"]) {
+  test(`locked candidate ${failure} rejects without writes`, async () => {
+    fail = failure;
+    const before = structuredClone(state);
+    assert.equal((await call()).status, 400);
+    assert.deepEqual(state, before);
+  });
+}
