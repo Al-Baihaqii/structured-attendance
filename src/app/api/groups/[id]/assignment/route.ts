@@ -22,15 +22,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       assertGroupMutable(group);
       if (!musyrif || !musyrif.isActive || musyrif.role !== "MUSYRIF") return NextResponse.json({ error: "Target harus berupa Musyrif aktif." }, { status: 400 });
       if (musyrif.id === currentUser.userId) return NextResponse.json({ error: "Musyrif tidak dapat menugaskan dirinya sendiri." }, { status: 400 });
-      if (musyrif.sectorId !== group.sectorId && currentUser.role !== "SUPER_ADMIN") return NextResponse.json({ error: "Musyrif harus berada pada sektor yang sama." }, { status: 400 });
+      if (!musyrif.cityId || musyrif.cityId !== group.sector.mahalli.cityId) return NextResponse.json({ error: "Musyrif harus berada pada kota yang sama." }, { status: 400 });
 
-      const assignments = await tx.userGroup.findMany({ where: { groupId, user: { role: "MUSYRIF" } } });
+      const assignments = await tx.groupAssignment.findMany({ where: { groupId, endedAt: null } });
       if (assignments.length > 1) return duplicateAssignment();
       const old = assignments[0];
-      if (old) await tx.userGroup.delete({ where: { id: old.id } });
+      if (old?.musyrifId === musyrif.id) return ok({ success: true });
+      const now = new Date();
+      if (old) await tx.groupAssignment.update({ where: { id: old.id }, data: { endedAt: now } });
+      const assignment = await tx.groupAssignment.create({ data: { groupId, musyrifId: musyrif.id, startedAt: now } });
+      // Compatibility mirror only; never use it to infer tenure ownership.
+      await tx.userGroup.deleteMany({ where: { groupId } });
       await tx.userGroup.create({ data: { groupId, userId: musyrif.id } });
-      await tx.groupAssignmentHistory.create({ data: { groupId, oldMusyrifId: old?.userId, newMusyrifId: musyrif.id, changedById: currentUser.userId, reason: input.reason } });
-      await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "ASSIGN", entityType: "GROUP", entityId: groupId, description: `Menugaskan ${musyrif.name} ke ${group.name}.` } });
+      await tx.groupAssignmentHistory.create({ data: { groupId, oldMusyrifId: old?.musyrifId, newMusyrifId: musyrif.id, changedById: currentUser.userId, reason: input.reason } });
+      await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "ASSIGN", entityType: "GROUP", entityId: groupId, description: `Menugaskan ${musyrif.name} ke ${group.name}.`, metadata: { assignmentId: assignment.id, previousAssignmentId: old?.id ?? null } } });
       return ok({ success: true });
     }, { isolationLevel: "ReadCommitted" });
   } catch (error) {
@@ -48,13 +53,22 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       if (!group) return NextResponse.json({ error: "Kelompok tidak ditemukan." }, { status: 404 });
       assertGroupAccess(currentUser, group, "manage");
       assertGroupMutable(group);
-      const assignments = await tx.userGroup.findMany({ where: { groupId, user: { role: "MUSYRIF" } } });
+      const assignments = await tx.groupAssignment.findMany({ where: { groupId, endedAt: null } });
       if (assignments.length > 1) return duplicateAssignment();
       const old = assignments[0];
-      if (!old) return ok({ success: true });
-      await tx.userGroup.delete({ where: { id: old.id } });
-      await tx.groupAssignmentHistory.create({ data: { groupId, oldMusyrifId: old.userId, changedById: currentUser.userId, reason: "Penugasan dicabut." } });
-      await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "UNASSIGN", entityType: "GROUP", entityId: groupId, description: `Mencabut Musyrif dari ${group.name}.` } });
+      if (!old) {
+        // Revocation also removes stale legacy access, without inventing a tenure.
+        const removed = await tx.userGroup.deleteMany({ where: { groupId } });
+        if (removed.count) await tx.activityLog.create({ data: {
+          actorId: currentUser.userId, action: "UNASSIGN", entityType: "GROUP", entityId: groupId,
+          description: `Mencabut penugasan lama dari ${group.name}.`, metadata: { assignmentId: null, legacyAssignmentsRemoved: removed.count },
+        } });
+        return ok({ success: true });
+      }
+      await tx.groupAssignment.update({ where: { id: old.id }, data: { endedAt: new Date() } });
+      await tx.userGroup.deleteMany({ where: { groupId } });
+      await tx.groupAssignmentHistory.create({ data: { groupId, oldMusyrifId: old.musyrifId, changedById: currentUser.userId, reason: "Penugasan dicabut." } });
+      await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "UNASSIGN", entityType: "GROUP", entityId: groupId, description: `Mencabut Musyrif dari ${group.name}.`, metadata: { assignmentId: old.id } } });
       return ok({ success: true });
     }, { isolationLevel: "ReadCommitted" });
   } catch (error) {

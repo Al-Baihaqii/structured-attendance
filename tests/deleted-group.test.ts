@@ -8,16 +8,17 @@ const require = createRequire(import.meta.url);
 let status: GroupStatus;
 let user: SessionUser;
 let mutations: string[];
-const group = () => ({ id: "g1", name: "Group", status, sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, userGroups: [{ userId: "u1" }], assignmentHistory: [{ id: "history1" }] });
+const group = () => ({ id: "g1", name: "Group", status, sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, assignments: [{ id: "t1", musyrifId: "u1", endedAt: null }], userGroups: [{ userId: "u1" }], assignmentHistory: [{ id: "history1" }] });
 const write = (name: string) => async ({ data }: any = {}) => { mutations.push(name); return { id: "result", ...data }; };
 const db = {
   $queryRaw: async () => [],
   group: { findUnique: async () => group(), update: write("group") },
   member: { findUnique: async () => ({ id: "m1", groupId: "g1", name: "Original", group: group() }), findMany: async () => [{ id: "m1" }], create: write("member.create"), update: write("member.update"), updateMany: async () => { mutations.push("member.update"); return { count: 1 }; } },
-  user: { findUnique: async () => ({ id: "musyrif", name: "Musyrif", role: "MUSYRIF", isActive: true, sectorId: "s1" }) },
-  userGroup: { findMany: async () => [{ id: "assignment", userId: "musyrif" }], create: write("assignment.create"), delete: write("assignment.delete") },
+  user: { findUnique: async () => ({ id: "musyrif", name: "Musyrif", role: "MUSYRIF", isActive: true, cityId: "c1", sectorId: "s1" }) },
+  groupAssignment: { findMany: async () => [{ id: "t1", musyrifId: "previous", endedAt: null }], update: write("tenure.close"), create: write("tenure.create") },
+  userGroup: { deleteMany: write("assignment.delete"), findMany: async () => [{ id: "assignment", userId: "musyrif" }], create: write("assignment.create"), delete: write("assignment.delete") },
   groupAssignmentHistory: { create: write("history") },
-  attendanceSession: { findFirst: async () => ({ id: "a1", meetingNumber: 1, group: group() }), create: write("session.create"), updateMany: async () => { mutations.push("session.lock"); return { count: 1 }; }, update: write("session.update") },
+  attendanceSession: { aggregate: async () => ({ _max: { meetingNumber: null } }), findFirst: async () => ({ id: "a1", meetingNumber: 1, group: group() }), create: write("session.create"), updateMany: async () => { mutations.push("session.lock"); return { count: 1 }; }, update: write("session.update") },
   attendanceRecord: { findMany: async () => [], createMany: write("record") },
   activityLog: { create: write("log") },
 };

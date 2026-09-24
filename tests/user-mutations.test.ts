@@ -16,6 +16,7 @@ const duplicate = (field: string) => new Prisma.PrismaClientKnownRequestError("U
 const prisma = {
   user: { create: unexpected, update: unexpected, findUnique: async ({ where }: any) => users.find(user => user.id === where.id) ?? null },
   activityLog: { create: unexpected },
+  city: { findUnique: async ({ where }: any) => ({ id: where.id }) },
   sector: { findUnique: async ({ where }: any) => ({ id: where.id, mahalliId: "m1", mahalli: { cityId: where.id === "outside" ? "c2" : "c1" } }) },
   $transaction: async (run: any) => {
     transactions++;
@@ -62,7 +63,7 @@ require.cache[authPath]!.exports = {
 };
 const { POST } = require("../src/app/api/users/route");
 const create = (overrides = {}) => POST(new Request("http://localhost/api/users", {
-  method: "POST", body: JSON.stringify({ username: "newuser", name: "New User", password: "password123", role: "MUSYRIF", sectorId: "s1", ...overrides }),
+  method: "POST", body: JSON.stringify({ username: "newuser", name: "New User", password: "password123", role: "MUSYRIF", cityId: "c1", sectorId: "s1", ...overrides }),
 }));
 beforeEach(() => { users = []; logs = []; mode = ""; transactions = 0; hashes = []; });
 
@@ -74,7 +75,7 @@ test("user creation commits the user and corresponding activity log", async () =
   assert.deepEqual(hashes, ["password123"]);
   assert.equal(users[0].passwordHash, "hashed-password");
   assert.equal(users[0].cityId, "c1");
-  assert.equal(users[0].mahalliId, "m1");
+  assert.equal(users[0].mahalliId, null);
   assert.deepEqual(logs, [{ actorId: "admin", action: "CREATE", entityType: "USER", entityId: "new", description: "Membuat pengguna New User (MUSYRIF)." }]);
 });
 test("ActivityLog failure rolls back the created user", async () => {
@@ -100,7 +101,7 @@ test("unrelated unique failure is not reported as a duplicate username", async (
   assert.deepEqual(logs, []);
 });
 test("unauthorized scope is rejected before hashing or transaction", async () => {
-  assert.equal((await create({ sectorId: "outside" })).status, 403);
+  assert.equal((await create({ cityId: "outside" })).status, 403);
   assert.equal(transactions, 0);
   assert.deepEqual(hashes, []);
   assert.deepEqual(users, []);

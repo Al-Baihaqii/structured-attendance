@@ -71,8 +71,9 @@ test("final target scope and role must also be authorized", async () => {
 });
 
 test("inconsistent or missing hierarchy is rejected by create and update without mutation", async () => {
+  target.role = "SECTOR_ADMIN";
   for (const input of [{ mahalliId: "m2" }, { cityId: "c2" }, { sectorId: "missing" }]) {
-    assert.equal((await create(input)).status, 400);
+    assert.equal((await create({ ...input, role: "SECTOR_ADMIN" })).status, 400);
     assert.equal((await patch(input)).status, 400);
     assert.equal(writes.length, 0);
   }
@@ -107,7 +108,7 @@ test("explicit null can clear scope during an authorized role change", async () 
 });
 
 test("derived parent scope cannot conceal an out-of-scope sector", async () => {
-  assert.equal((await create({ cityId: null, mahalliId: null, sectorId: "s2" })).status, 403);
+  assert.equal((await create({ role: "SECTOR_ADMIN", cityId: null, mahalliId: null, sectorId: "s2" })).status, 403);
   assert.equal(writes.length, 0);
 });
 
@@ -115,4 +116,22 @@ test("unscoped admins never gain access through null equality", () => {
   for (const role of ["CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"] as const) {
     assert.equal(canCreateUserRole({ ...actor, role, cityId: null, mahalliId: null, sectorId: null }, "MUSYRIF", { cityId: null, mahalliId: null, sectorId: null }), false);
   }
+});
+
+
+test("Musyrif requires explicit city and clears legacy lower scope", async () => {
+  assert.equal((await create({ cityId: null })).status, 400);
+  assert.equal(writes.length, 0);
+  assert.equal((await create({ cityId: "c1", mahalliId: "m2", sectorId: "s2" })).status, 201);
+  assert.equal(writes[0].data.cityId, "c1");
+  assert.equal(writes[0].data.mahalliId, null);
+  assert.equal(writes[0].data.sectorId, null);
+});
+test("Musyrif outside city rejected and lower admins do not gain city-wide user management", async () => {
+  assert.equal((await create({ cityId: "c2" })).status, 403);
+  for (const role of ["MAHALLI_ADMIN", "SECTOR_ADMIN"] as const) {
+    actor = { ...actor, role, mahalliId: "m1", sectorId: "s1" };
+    assert.equal((await create()).status, 403);
+  }
+  assert.equal(writes.length, 0);
 });

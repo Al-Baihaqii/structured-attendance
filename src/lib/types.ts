@@ -21,6 +21,7 @@ export type GroupWithScope = {
       cityId: string;
     } | null;
   } | null;
+  assignments?: { id: string; musyrifId: string; endedAt: Date | null }[];
   userGroups?: {
     userId?: string;
     user?: {

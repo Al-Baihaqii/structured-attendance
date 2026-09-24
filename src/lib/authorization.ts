@@ -64,6 +64,11 @@ export function canCreateUserRole(
 export function isAssignedMusyrif(currentUser: SessionUser, group: GroupWithScope) {
   if (currentUser.role !== "MUSYRIF") return false;
 
+  // New write paths load tenures; legacy readers retain the mirrored UserGroup path.
+  if (group.assignments) {
+    return Boolean(currentUser.cityId && currentUser.cityId === group.sector?.mahalli?.cityId
+      && group.assignments.some(assignment => assignment.musyrifId === currentUser.userId && assignment.endedAt === null));
+  }
   return Boolean(
     group.userGroups?.some((assignment) => {
       return assignment.userId === currentUser.userId || assignment.user?.id === currentUser.userId;

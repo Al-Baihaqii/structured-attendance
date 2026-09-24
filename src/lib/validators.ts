@@ -58,6 +58,7 @@ export const attendanceBatchSchema = z.object({
 });
 
 export function validateScopeForRole(role: z.infer<typeof userSchema>["role"], scope: { cityId?: string | null; mahalliId?: string | null; sectorId?: string | null; }) {
+  if (role === "MUSYRIF" && !scope.cityId) return "Musyrif harus memiliki kota.";
   if (role === "CITY_ADMIN" && !scope.cityId) return "Admin Kota harus memiliki kota.";
   if (role === "MAHALLI_ADMIN" && !scope.mahalliId) return "Admin Mahalli harus memiliki mahalli.";
   if (role === "SECTOR_ADMIN" && !scope.sectorId) return "Admin Sektor harus memiliki sektor.";

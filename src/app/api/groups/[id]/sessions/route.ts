@@ -11,14 +11,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const currentUser = await requireAuth();
     const { id: groupId } = await params;
-    const input = meetingSchema.parse(await request.json());
+    const input = meetingSchema.omit({ meetingNumber: true }).parse(await request.json());
     return await prisma.$transaction(async (tx) => {
       await lockGroup(tx, groupId);
-      const group = await tx.group.findUnique({ where: { id: groupId }, include: { sector: { include: { mahalli: true } }, userGroups: true } });
+      const group = await tx.group.findUnique({ where: { id: groupId }, include: { sector: { include: { mahalli: true } }, assignments: { where: { endedAt: null } } } });
       if (!group) return NextResponse.json({ error: "Kelompok tidak ditemukan." }, { status: 404 });
       assertMeetingAccess(currentUser, group);
       assertGroupMutable(group);
-      const session = await tx.attendanceSession.create({ data: { groupId, meetingNumber: input.meetingNumber, date: new Date(`${input.date}T00:00:00.000Z`), notes: input.notes || null } });
+      if (group.assignments.length !== 1) return NextResponse.json({ error: "Kelompok harus memiliki tepat satu penugasan Musyrif aktif.", code: "ACTIVE_ASSIGNMENT_REQUIRED" }, { status: 409 });
+      const assignment = group.assignments[0];
+      const musyrif = await tx.user.findUnique({ where: { id: assignment.musyrifId }, select: { role: true, isActive: true, cityId: true } });
+      if (!musyrif?.isActive || musyrif.role !== "MUSYRIF" || musyrif.cityId !== group.sector.mahalli.cityId) {
+        return NextResponse.json({ error: "Penugasan Musyrif tidak valid untuk kota kelompok ini.", code: "INVALID_GROUP_ASSIGNMENT" }, { status: 409 });
+      }
+      const highest = await tx.attendanceSession.aggregate({ where: { groupId }, _max: { meetingNumber: true } });
+      const meetingNumber = (highest._max.meetingNumber ?? 0) + 1;
+      if (meetingNumber > 2147483647) return NextResponse.json({ error: "Nomor pertemuan telah mencapai batas." }, { status: 409 });
+      const session = await tx.attendanceSession.create({ data: { groupId, assignmentId: assignment.id, meetingNumber, date: new Date(`${input.date}T00:00:00.000Z`), notes: input.notes || null } });
       await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "ATTENDANCE_SESSION", entityId: session.id, description: `Menambahkan pertemuan ${session.meetingNumber} pada kelompok ${group.name}.` } });
       return ok({ session }, { status: 201 });
     }, { isolationLevel: "ReadCommitted" });

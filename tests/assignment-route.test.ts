@@ -19,21 +19,27 @@ const prisma = { $transaction: async (fn: any, options: any) => {
     const result = await fn({
       $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
         assert.match(strings.join("?"), /SELECT "id" FROM "Group" WHERE "id" = \? FOR UPDATE/);
-        assert.deepEqual(values, ["g1"]);
+        assert.deepEqual(values, [state.group.id]);
         const previous = tail;
         tail = new Promise<void>((resolve) => { release = resolve; });
         await previous;
         onLock?.(); onLock = undefined;
         draft = structuredClone(state);
-        return [{ id: "g1" }];
+        return [{ id: state.group.id }];
       },
       group: {
         findUnique: async () => ({ ...checked().group, sector: sector(checked().group.sectorId) }),
         update: async ({ data }: any) => { Object.assign(checked().group, Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined))); return checked().group; },
       },
       sector: { findUnique: async ({ where }: any) => { checked(); return sector(where.id); } },
-      user: { findUnique: async ({ where }: any) => { checked(); return { id: where.id, name: where.id, role: "MUSYRIF", isActive: true, sectorId: "s1" }; } },
+      user: { findUnique: async ({ where }: any) => { checked(); return { id: where.id, name: where.id, role: "MUSYRIF", isActive: true, cityId: fail === "city" ? "c2" : "c1", sectorId: "s1" }; } },
+      groupAssignment: {
+        findMany: async ({ where }: any) => checked().tenures.filter((row: any) => row.groupId === where.groupId && row.endedAt === null),
+        update: async ({ where, data }: any) => Object.assign(checked().tenures.find((row: any) => row.id === where.id), data),
+        create: async ({ data }: any) => { const row = { id: `t${checked().tenures.length}`, endedAt: null, ...data }; checked().tenures.push(row); return row; },
+      },
       userGroup: {
+        deleteMany: async ({ where }: any) => { const before = checked().rows.length; checked().rows = checked().rows.filter((row: any) => row.groupId !== where.groupId); return { count: before - checked().rows.length }; },
         findMany: async () => checked().rows.map((row: any) => ({ ...row, user: { sectorId: "s1" } })),
         delete: async ({ where }: any) => { checked().rows = checked().rows.filter((r: any) => r.id !== where.id); },
         create: async ({ data }: any) => { checked().rows.push({ id: data.userId, ...data }); },
@@ -51,9 +57,9 @@ const authPath = require.resolve("../src/lib/auth"); require(authPath);
 require.cache[authPath]!.exports = { requireAuth: async () => actor };
 const { POST, DELETE } = require("../src/app/api/groups/[id]/assignment/route");
 const { PATCH } = require("../src/app/api/groups/[id]/route");
-const call = (handler = POST, body: any = { musyrifId: "m1" }) => handler(new Request("http://localhost/api/test", { method: handler === DELETE ? "DELETE" : "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id: "g1" }) });
+const call = (handler = POST, body: any = { musyrifId: "m1" }, groupId = "g1") => handler(new Request("http://localhost/api/test", { method: handler === DELETE ? "DELETE" : "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id: groupId }) });
 beforeEach(() => {
-  state = { group: { id: "g1", name: "Group", sectorId: "s1", status: "ACTIVE" }, rows: [], history: [], logs: [] };
+  state = { group: { id: "g1", name: "Group", sectorId: "s1", status: "ACTIVE" }, rows: [], tenures: [], history: [], logs: [] };
   actor = { userId: "admin", role: "CITY_ADMIN", cityId: "c1" };
   fail = ""; tail = Promise.resolve(); onLock = undefined;
 });
@@ -83,7 +89,7 @@ test("POST and DELETE serialize without leaving an extra assignment", async () =
 for (const handler of [POST, DELETE]) {
   test(`${handler.name}: duplicates rejected even for SUPER_ADMIN`, async () => {
     actor.role = "SUPER_ADMIN";
-    state.rows = [{ id: "m1", userId: "m1" }, { id: "m2", userId: "m2" }];
+    state.tenures = [{ id: "t1", groupId: "g1", musyrifId: "m1", endedAt: null }, { id: "t2", groupId: "g1", musyrifId: "m2", endedAt: null }];
     const before = structuredClone(state);
     const response = await call(handler);
     assert.equal(response.status, 409);
@@ -93,6 +99,7 @@ for (const handler of [POST, DELETE]) {
   for (const failure of ["history", "log"]) {
     test(`${handler.name}: ${failure} failure rolls back all writes`, async () => {
       state.rows = [{ id: "old", userId: "old" }];
+      state.tenures = [{ id: "old", groupId: "g1", musyrifId: "old", endedAt: null }];
       const before = structuredClone(state); fail = failure;
       assert.equal((await call(handler)).ok, false);
       assert.deepEqual(state, before);
@@ -120,15 +127,49 @@ test("assignment first makes conflicting transfer fail", async () => {
   assert.equal(state.rows.length, 1);
   assert.equal(state.logs.length, 1);
 });
-test("transfer first makes assignment validate the new sector", async () => {
+test("transfer first allows assignment in another sector of the same city", async () => {
   const responses = await Promise.all([call(PATCH, { sectorId: "s2" }), call()]);
-  assert.deepEqual(responses.map(r => r.status), [200, 400]);
+  assert.deepEqual(responses.map(r => r.status), [200, 200]);
   assert.equal(state.group.sectorId, "s2");
-  assert.equal(state.rows.length, 0);
-  assert.equal(state.logs.length, 1);
+  assert.equal(state.rows.length, 1);
+  assert.equal(state.logs.length, 2);
 });
 test("SUPER_ADMIN retains cross-sector assignment flexibility", async () => {
   actor.role = "SUPER_ADMIN"; state.group.sectorId = "s2";
   assert.equal((await call()).status, 200);
   assert.equal(state.rows.length, 1);
+});
+
+
+test("same active Musyrif is a no-op; returning creates a distinct tenure", async () => {
+  await call();
+  const before = structuredClone(state);
+  await call(); assert.deepEqual(state, before);
+  await call(POST, { musyrifId: "m2" });
+  await call();
+  assert.equal(state.tenures.length, 3);
+  assert.equal(state.tenures.filter((row: any) => row.endedAt === null).length, 1);
+  assert.ok(state.tenures[0].endedAt instanceof Date);
+  assert.equal(state.tenures[2].musyrifId, "m1");
+});
+test("SUPER_ADMIN cannot assign across cities", async () => {
+  actor.role = "SUPER_ADMIN"; fail = "city";
+  assert.equal((await call()).status, 400);
+  assert.deepEqual(state.tenures, []); assert.deepEqual(state.logs, []);
+});
+
+test("one Musyrif retains simultaneous tenures and mirrors in multiple same-city groups", async () => {
+  assert.equal((await call()).status, 200);
+  state.group.id = "g2";
+  assert.equal((await call(POST, { musyrifId: "m1" }, "g2")).status, 200);
+  assert.equal(state.tenures.filter((row: any) => row.musyrifId === "m1" && row.endedAt === null).length, 2);
+  assert.deepEqual(state.rows.map((row: any) => row.groupId).sort(), ["g1", "g2"]);
+});
+
+test("revoking a legacy-only mirror logs cleanup without fabricating tenure history", async () => {
+  state.rows = [{ id: "legacy", userId: "m1", groupId: "g1" }];
+  assert.equal((await call(DELETE)).status, 200);
+  assert.deepEqual(state.rows, []); assert.deepEqual(state.tenures, []);
+  assert.equal(state.logs.length, 1);
+  assert.equal(state.logs[0].metadata.legacyAssignmentsRemoved, 1);
 });

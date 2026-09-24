@@ -6,6 +6,12 @@ type UserScope = { cityId?: string | null; mahalliId?: string | null; sectorId?:
 
 export async function validateUserScope(role: Role, input: UserScope) {
   const scope = { cityId: input.cityId || null, mahalliId: input.mahalliId || null, sectorId: input.sectorId || null };
+  if (role === "MUSYRIF") {
+    if (!scope.cityId) throw new Error("Musyrif harus memiliki kota.");
+    const city = await prisma.city.findUnique({ where: { id: scope.cityId } });
+    if (!city) throw new Error("Kota tidak ditemukan.");
+    return { cityId: scope.cityId, mahalliId: null, sectorId: null };
+  }
   const error = validateScopeForRole(role, scope);
   if (error) throw new Error(error);
   if (scope.sectorId) {
