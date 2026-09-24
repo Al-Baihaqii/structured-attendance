@@ -13,7 +13,7 @@ export async function GET() {
       include: {
         sector: { include: { mahalli: { include: { city: true } } } },
         members: { where: { isActive: true }, select: { id: true } },
-        userGroups: { where: { user: { role: "MUSYRIF", isActive: true } }, include: { user: { select: { id: true, name: true } } } },
+        assignments: { include: { musyrif: { select: { id: true, name: true } } } },
       },
       orderBy: [{ status: "asc" }, { name: "asc" }],
     });

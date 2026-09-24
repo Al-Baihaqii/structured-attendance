@@ -23,13 +23,14 @@ export default async function MemberAttendanceHistoryPage({ params, searchParams
   const { group } = member;
   return <div>
     <div className="mb-7">
-      <Link className="text-xs font-semibold text-brand" href={`/dashboard/groups/${id}`}>Kembali ke kelompok</Link>
+      <Link className="text-xs font-semibold text-brand" href={`/dashboard/groups/${id}${history.filters.history ? "?history=1" : ""}`}>Kembali ke kelompok</Link>
       <p className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-brand">Riwayat presensi</p>
       <h1 className="mt-1 text-3xl font-bold">{member.name}</h1>
       <div className="mt-2"><StatusBadge tone={member.isActive ? "green" : "amber"}>{member.isActive ? "Aktif" : "Nonaktif"}</StatusBadge></div>
       <p className="mt-2 text-sm font-semibold">{group.name} · {GROUP_STATUS_LABELS[group.status]}</p>
       <p className="mt-1 text-xs text-muted">{group.sector.mahalli.city.name} · {group.sector.mahalli.name} · {group.sector.name}</p>
     </div>
+    {user.role === "MUSYRIF" && <nav className="mb-4 flex gap-4"><Link href={`/dashboard/groups/${id}/members/${memberId}`}>Penugasan aktif</Link><Link href={`/dashboard/groups/${id}/members/${memberId}?history=1`}>Riwayat penugasan saya</Link></nav>}
     <p className="mb-4 text-xs text-muted">Periode: {history.filters.from || "Awal riwayat"} ? {history.filters.to || "Semua tanggal"}</p>
     <div className="space-y-6">
       <Card className="p-5">

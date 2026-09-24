@@ -120,12 +120,12 @@ for (const handler of [POST, DELETE]) {
     assert.deepEqual(state.rows, []);
   });
 }
-test("assignment first makes conflicting transfer fail", async () => {
+test("assignment first allows same-city transfer retaining tenure", async () => {
   const responses = await Promise.all([call(), call(PATCH, { sectorId: "s2" })]);
-  assert.deepEqual(responses.map(r => r.status), [200, 409]);
-  assert.equal(state.group.sectorId, "s1");
+  assert.deepEqual(responses.map(r => r.status), [200, 200]);
+  assert.equal(state.group.sectorId, "s2");
   assert.equal(state.rows.length, 1);
-  assert.equal(state.logs.length, 1);
+  assert.equal(state.logs.length, 2);
 });
 test("transfer first allows assignment in another sector of the same city", async () => {
   const responses = await Promise.all([call(PATCH, { sectorId: "s2" }), call()]);

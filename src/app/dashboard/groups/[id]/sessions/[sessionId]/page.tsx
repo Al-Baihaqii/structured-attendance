@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, CalendarDays, UsersRound } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { assertMeetingAccess, AuthorizationError } from "@/lib/authorization";
+import { getSessionAccessWhere, assertSessionAccess, canEditSession, AuthorizationError } from "@/lib/authorization";
 import { Card } from "@/components/ui";
 import { summarizeAttendance } from "@/lib/attendance-summary";
 
@@ -14,13 +14,14 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
   if (!user) redirect("/login");
   const { id: groupId, sessionId } = await params;
   const session = await prisma.attendanceSession.findFirst({
-    where: { id: sessionId, groupId },
+    where: { id: sessionId, groupId, ...getSessionAccessWhere(user, "all") },
     include: {
+      assignment: true,
       records: { select: { memberId: true, status: true, reason: true } },
       group: {
         include: {
           sector: { include: { mahalli: { include: { city: true } } } },
-          userGroups: { select: { userId: true } },
+          assignments: { select: { id: true, musyrifId: true, endedAt: true } },
           members: { orderBy: { name: "asc" }, select: { id: true, name: true, isActive: true } },
         },
       },
@@ -28,7 +29,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
   });
   if (!session) notFound();
   try {
-    assertMeetingAccess(user, session.group);
+    assertSessionAccess(user, session);
   } catch (error) {
     if (error instanceof AuthorizationError) notFound();
     throw error;
@@ -67,7 +68,10 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       </Card>
       <Card className="overflow-hidden">
         <div className="flex items-center gap-3 border-b border-line px-5 py-4"><div className="rounded-xl bg-brand-soft p-2.5 text-brand"><UsersRound size={19} /></div><div><h2 className="font-bold">Daftar anggota kelompok</h2><p className="mt-1 text-xs text-muted">{group.members.length} anggota</p></div></div>
-        <AttendanceForm key={session.id} groupId={group.id} sessionId={session.id} members={group.members} records={session.records} attendanceVersion={session.attendanceVersion} />
+        {canEditSession(user, session) ? <AttendanceForm key={session.id} groupId={group.id} sessionId={session.id} members={group.members} records={session.records} attendanceVersion={session.attendanceVersion} /> : <div className="divide-y divide-line">
+          <p className="p-5 text-sm text-muted">Riwayat presensi ? hanya baca.</p>
+          {group.members.map(member => <div className="p-5" key={member.id}><p>{member.name} ? {member.isActive ? "Aktif" : "Nonaktif"}</p><p>{session.records.find(record => record.memberId === member.id)?.status || "Belum ada data"}</p></div>)}
+        </div>}
       </Card>
     </div>
   </div>;

@@ -59,19 +59,19 @@ export function CreateUserForm({ cities, sectors }: { cities: CityOption[]; sect
   const validMahalliId = visibleMahallis.some((mahalli) => mahalli.id === mahalliId) ? mahalliId : "";
   const visibleSectors = sectors.filter((sector) => validMahalliId && sector.mahalli.city.id === validCityId && sector.mahalli.id === validMahalliId);
   const validSectorId = visibleSectors.some((sector) => sector.id === sectorId) ? sectorId : "";
-  const needsMahalli = ["MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"].includes(role);
-  const needsSector = ["SECTOR_ADMIN", "MUSYRIF"].includes(role);
+  const needsMahalli = ["MAHALLI_ADMIN", "SECTOR_ADMIN"].includes(role);
+  const needsSector = ["SECTOR_ADMIN"].includes(role);
   const scopeReady = role === "SUPER_ADMIN" || Boolean(validCityId && (!needsMahalli || validMahalliId) && (!needsSector || validSectorId));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scopeReady) return;
-    const ok = await mutate("/api/users", { ...form, role, cityId: role === "SUPER_ADMIN" ? null : validCityId || null, mahalliId: ["MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"].includes(role) ? validMahalliId || null : null, sectorId: ["SECTOR_ADMIN", "MUSYRIF"].includes(role) ? validSectorId || null : null });
+    const ok = await mutate("/api/users", { ...form, role, cityId: role === "SUPER_ADMIN" ? null : validCityId || null, mahalliId: ["MAHALLI_ADMIN", "SECTOR_ADMIN"].includes(role) ? validMahalliId || null : null, sectorId: ["SECTOR_ADMIN"].includes(role) ? validSectorId || null : null });
     if (ok) setForm({ username: "", name: "", password: "", email: "" });
   };
   return <form onSubmit={submit} className="space-y-3">
     <div className="grid gap-3 sm:grid-cols-2"><div><label className="label">Nama lengkap</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div><div><label className="label">Username</label><input className="input" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></div></div>
     <div className="grid gap-3 sm:grid-cols-2"><div><label className="label">Password sementara</label><input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div><div><label className="label">Peran</label><select className="select" value={role} onChange={(e) => setRole(e.target.value)}><option value="MUSYRIF">Musyrif</option><option value="SECTOR_ADMIN">Admin Sektor</option><option value="MAHALLI_ADMIN">Admin Mahalli</option><option value="CITY_ADMIN">Admin Kota</option><option value="SUPER_ADMIN">Super Admin</option></select></div></div>
-    {role !== "SUPER_ADMIN" && <div className="grid gap-3 sm:grid-cols-3"><div><label className="label">Kota</label><select className="select" value={validCityId} onChange={(e) => { setCityId(e.target.value); setMahalliId(""); setSectorId(""); }}><option value="">Pilih kota</option>{cities.map((city) => <option key={city.id} value={city.id}>{city.name}</option>)}</select></div>{["MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"].includes(role) && <div><label className="label">Mahalli</label><select className="select" value={validMahalliId} onChange={(e) => { setMahalliId(e.target.value); setSectorId(""); }}><option value="">Pilih mahalli</option>{visibleMahallis.map((mahalli) => <option key={mahalli.id} value={mahalli.id}>{mahalli.name}</option>)}</select></div>}{["SECTOR_ADMIN", "MUSYRIF"].includes(role) && <div><label className="label">Sektor</label><select className="select" value={validSectorId} onChange={(e) => setSectorId(e.target.value)}><option value="">Pilih sektor</option>{visibleSectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></div>}</div>}
+    {role !== "SUPER_ADMIN" && <div className="grid gap-3 sm:grid-cols-3"><div><label className="label">Kota</label><select className="select" value={validCityId} onChange={(e) => { setCityId(e.target.value); setMahalliId(""); setSectorId(""); }}><option value="">Pilih kota</option>{cities.map((city) => <option key={city.id} value={city.id}>{city.name}</option>)}</select></div>{["MAHALLI_ADMIN", "SECTOR_ADMIN"].includes(role) && <div><label className="label">Mahalli</label><select className="select" value={validMahalliId} onChange={(e) => { setMahalliId(e.target.value); setSectorId(""); }}><option value="">Pilih mahalli</option>{visibleMahallis.map((mahalli) => <option key={mahalli.id} value={mahalli.id}>{mahalli.name}</option>)}</select></div>}{["SECTOR_ADMIN"].includes(role) && <div><label className="label">Sektor</label><select className="select" value={validSectorId} onChange={(e) => setSectorId(e.target.value)}><option value="">Pilih sektor</option>{visibleSectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></div>}</div>}
     <Alert message={error} /><Alert message={success} tone="success" />
     <button className="btn-primary" disabled={loading || !scopeReady}><UserPlus size={16} />{loading ? "Menyimpan..." : "Buat pengguna"}</button>
   </form>;
@@ -92,7 +92,7 @@ export function MemberForm({ groupId }: { groupId: string }) {
   </form>;
 }
 
-export function AssignmentForm({ groupId, musyrifs, currentMusyrifId }: { groupId: string; musyrifs: { id: string; name: string; sectorId: string | null }[]; currentMusyrifId?: string }) {
+export function AssignmentForm({ groupId, musyrifs, currentMusyrifId }: { groupId: string; musyrifs: { id: string; name: string; cityId: string | null }[]; currentMusyrifId?: string }) {
   const { mutate, error, success, loading } = useMutation();
   const [musyrifId, setMusyrifId] = useState(currentMusyrifId || "");
   return <div className="space-y-3">

@@ -14,7 +14,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const target = await tx.member.findUnique({ where: { id }, select: { groupId: true } });
       if (!target) return NextResponse.json({ error: "Anggota tidak ditemukan atau berada di luar scope Anda." }, { status: 404 });
       await lockGroup(tx, target.groupId);
-      const member = await tx.member.findUnique({ where: { id }, include: { group: { include: { sector: { include: { mahalli: true } } } } } });
+      const member = await tx.member.findUnique({ where: { id }, include: { group: { include: { assignments: { where: { endedAt: null } }, sector: { include: { mahalli: true } } } } } });
       if (!member || member.groupId !== target.groupId || !canManageMember(currentUser, member.group)) return NextResponse.json({ error: "Anggota tidak ditemukan atau berada di luar scope Anda." }, { status: 404 });
       assertGroupMutable(member.group);
       const input = memberSchema.partial().parse(await request.json());
@@ -39,7 +39,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       const target = await tx.member.findUnique({ where: { id }, select: { groupId: true } });
       if (!target) return NextResponse.json({ error: "Anggota tidak ditemukan atau berada di luar scope Anda." }, { status: 404 });
       await lockGroup(tx, target.groupId);
-      const member = await tx.member.findUnique({ where: { id }, include: { group: { include: { sector: { include: { mahalli: true } } } } } });
+      const member = await tx.member.findUnique({ where: { id }, include: { group: { include: { assignments: { where: { endedAt: null } }, sector: { include: { mahalli: true } } } } } });
       if (!member || member.groupId !== target.groupId || !canManageMember(currentUser, member.group)) return NextResponse.json({ error: "Anggota tidak ditemukan atau berada di luar scope Anda." }, { status: 404 });
       assertGroupMutable(member.group);
       const changed = await tx.member.updateMany({ where: { id, groupId: target.groupId, isActive: true }, data: { isActive: false } });

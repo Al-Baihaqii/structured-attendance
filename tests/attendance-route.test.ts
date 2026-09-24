@@ -16,12 +16,14 @@ let events: string[];
 let groupStatus: string;
 let cityId: string;
 let user: any;
+let sessionOwner: string;
+let tenureEndedAt: Date | null;
 let onLock: (() => void) | undefined;
 let onCommit: (() => void) | undefined;
 const tx = {
   $queryRaw: async (_sql: any, id: string) => { assert.equal(id, "g1"); events.push("group.lock"); onLock?.(); return []; },
   attendanceSession: {
-    findFirst: async () => { events.push("session.read"); assert.equal(events.at(-2), "group.lock"); return sessionExists ? { meetingNumber: 1, group: { id: "g1", name: "Group", status: groupStatus, sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId } }, userGroups: allowed ? [{ userId: "u1" }] : [] } } : null; },
+    findFirst: async () => { events.push("session.read"); assert.equal(events.at(-2), "group.lock"); return sessionExists ? { groupId: "g1", assignment: { id: "t1", groupId: "g1", musyrifId: sessionOwner, endedAt: tenureEndedAt }, meetingNumber: 1, group: { id: "g1", name: "Group", status: groupStatus, sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId } }, assignments: allowed ? [{ id: "t1", musyrifId: "u1", endedAt: null }] : [] } } : null; },
     updateMany: async ({ where }: any) => { events.push("session.lock"); assert.ok(events.indexOf("group.lock") < events.indexOf("session.lock")); return { count: where.attendanceVersion === version ? 1 : 0 }; },
     findUnique: async () => ({ attendanceVersion: version }),
     update: async ({ data }: any) => { version = data.attendanceVersion; },
@@ -67,7 +69,7 @@ const authPath = require.resolve("../src/lib/auth");
 require(authPath);
 require.cache[authPath]!.exports = { requireAuth: async () => user };
 const { PATCH } = require("../src/app/api/groups/[id]/sessions/[sessionId]/attendance/route") as typeof import("../src/app/api/groups/[id]/sessions/[sessionId]/attendance/route");
-beforeEach(() => { events = []; groupStatus = "ACTIVE"; cityId = "c1"; user = { userId: "u1", role: "MUSYRIF" }; onLock = undefined; onCommit = undefined; version = 0; rows = []; logs = []; writes = 0; writeQueries = 0; failLog = false; failWrite = false; allowed = true; sessionExists = true; memberExists = true; });
+beforeEach(() => { sessionOwner = "u1"; tenureEndedAt = null; events = []; groupStatus = "ACTIVE"; cityId = "c1"; user = { userId: "u1", role: "MUSYRIF", cityId: "c1" }; onLock = undefined; onCommit = undefined; version = 0; rows = []; logs = []; writes = 0; writeQueries = 0; failLog = false; failWrite = false; allowed = true; sessionExists = true; memberExists = true; });
 const save = (expectedVersion: number, records = [{ memberId: "m1", status: "HADIR", reason: "" }]) => PATCH(new Request("http://localhost/api/groups/g1/sessions/a1/attendance", { method: "PATCH", body: JSON.stringify({ expectedVersion, records }) }), { params: Promise.resolve({ id: "g1", sessionId: "a1" }) });
 
 test("changed batch increments version once and records only actual changes without reason text", async () => {
@@ -189,3 +191,13 @@ test("log failure rolls back both bulk inserts and grouped updates", async () =>
   assert.equal(writeQueries, 2);
   assert.deepEqual(rows, before); assert.equal(version, 0); assert.deepEqual(logs, []);
 });
+
+for (const scenario of ["predecessor", "closed-own"]) {
+  test(`${scenario} attendance cannot be mutated despite current group access`, async () => {
+    if (scenario === "predecessor") sessionOwner = "other";
+    else tenureEndedAt = new Date();
+    assert.equal((await save(0)).status, 403);
+    assert.equal(events.includes("session.lock"), false);
+    assert.equal(writes, 0); assert.equal(version, 0); assert.deepEqual(logs, []);
+  });
+}

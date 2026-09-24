@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 let status: GroupStatus;
 let user: SessionUser;
 let mutations: string[];
-const group = () => ({ id: "g1", name: "Group", status, sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, assignments: [{ id: "t1", musyrifId: "u1", endedAt: null }], userGroups: [{ userId: "u1" }], assignmentHistory: [{ id: "history1" }] });
+const group = () => ({ id: "g1", name: "Group", status, sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, assignments: [{ id: "t1", musyrifId: "u1", endedAt: null }], assignmentHistory: [{ id: "history1" }] });
 const write = (name: string) => async ({ data }: any = {}) => { mutations.push(name); return { id: "result", ...data }; };
 const db = {
   $queryRaw: async () => [],
@@ -18,7 +18,7 @@ const db = {
   groupAssignment: { findMany: async () => [{ id: "t1", musyrifId: "previous", endedAt: null }], update: write("tenure.close"), create: write("tenure.create") },
   userGroup: { deleteMany: write("assignment.delete"), findMany: async () => [{ id: "assignment", userId: "musyrif" }], create: write("assignment.create"), delete: write("assignment.delete") },
   groupAssignmentHistory: { create: write("history") },
-  attendanceSession: { aggregate: async () => ({ _max: { meetingNumber: null } }), findFirst: async () => ({ id: "a1", meetingNumber: 1, group: group() }), create: write("session.create"), updateMany: async () => { mutations.push("session.lock"); return { count: 1 }; }, update: write("session.update") },
+  attendanceSession: { aggregate: async () => ({ _max: { meetingNumber: null } }), findFirst: async () => ({ id: "a1", groupId: "g1", assignment: { id: "t1", groupId: "g1", musyrifId: "u1", endedAt: null }, meetingNumber: 1, group: group() }), create: write("session.create"), updateMany: async () => { mutations.push("session.lock"); return { count: 1 }; }, update: write("session.update") },
   attendanceRecord: { findMany: async () => [], createMany: write("record") },
   activityLog: { create: write("log") },
 };

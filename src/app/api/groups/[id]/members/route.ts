@@ -12,7 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id: groupId } = await params;
     return await prisma.$transaction(async (tx) => {
       await lockGroup(tx, groupId);
-      const group = await tx.group.findUnique({ where: { id: groupId }, include: { sector: { include: { mahalli: true } } } });
+      const group = await tx.group.findUnique({ where: { id: groupId }, include: { assignments: { where: { endedAt: null } }, sector: { include: { mahalli: true } } } });
       if (!group || !canManageMember(currentUser, group)) return NextResponse.json({ error: "Anda tidak memiliki akses ke anggota kelompok ini." }, { status: 403 });
       assertGroupMutable(group);
       const input = memberSchema.parse(await request.json());

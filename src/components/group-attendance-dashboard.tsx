@@ -9,9 +9,10 @@ export function GroupAttendanceDashboard({ groupId, report, error }: { groupId: 
     <h2 className="border-b border-line px-5 py-4 font-bold">Ringkasan presensi kelompok</h2>
     <div className="space-y-4 p-5">
       <form method="get" action={`/dashboard/groups/${groupId}`} className="flex flex-wrap items-end gap-3">
+        {report?.filters.history && <input type="hidden" name="history" value="1" />}
         <div><label className="label" htmlFor="report-from">Dari tanggal</label><input className="input" id="report-from" name="from" type="date" defaultValue={report?.filters.from} /></div>
         <div><label className="label" htmlFor="report-to">Sampai tanggal</label><input className="input" id="report-to" name="to" type="date" defaultValue={report?.filters.to} /></div>
-        <button className="btn-primary" type="submit">Terapkan</button><Link className="btn-quiet" href={`/dashboard/groups/${groupId}`}>Semua tanggal</Link>
+        <button className="btn-primary" type="submit">Terapkan</button><Link className="btn-quiet" href={`/dashboard/groups/${groupId}${report?.filters.history ? "?history=1" : ""}`}>Semua tanggal</Link>
       </form>
       <Alert message={error || ""} />
       {report && <>

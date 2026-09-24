@@ -46,11 +46,12 @@ beforeEach(() => {
 afterEach(() => mock.restoreAll());
 
 test("initial selection uses a sector belonging to the selected city and Mahalli", async () => {
-  assert.deepEqual(selection(), ["MUSYRIF", "semarang", "m1", "s1"]);
+  change(0, "SECTOR_ADMIN");
+  assert.deepEqual(selection(), ["SECTOR_ADMIN", "semarang", "m1", "s1"]);
   await submit();
   assert.deepEqual([payloads[0].cityId, payloads[0].mahalliId, payloads[0].sectorId], ["semarang", "m1", "s1"]);
 });
-for (const role of ["MUSYRIF", "SECTOR_ADMIN"]) {
+for (const role of ["SECTOR_ADMIN"]) {
   test(`${role}: changing to UAT clears dependents and submits matching IDs`, async () => {
     change(0, role); change(1, "uat");
     assert.deepEqual(selection(), [role, "uat", "", ""]);
@@ -68,7 +69,7 @@ for (const role of ["MUSYRIF", "SECTOR_ADMIN"]) {
   });
 }
 test("empty city and empty Mahalli never offer sectors from other parents", async () => {
-  change(1, "empty");
+  change(0, "SECTOR_ADMIN"); change(1, "empty");
   assert.deepEqual(optionIds(2), [""]);
   assert.deepEqual(optionIds(3), [""]);
   await submit(); assert.equal(payloads.length, 0);
@@ -78,7 +79,7 @@ test("empty city and empty Mahalli never offer sectors from other parents", asyn
   await submit(); assert.equal(payloads.length, 0);
 });
 test("removed hierarchy options cannot submit stale IDs", async () => {
-  render(); sectors = [];
+  change(0, "SECTOR_ADMIN"); sectors = [];
   assert.equal(selection()[3], "");
   await submit(); assert.equal(payloads.length, 0);
 });
@@ -89,4 +90,11 @@ test("role switches keep valid hierarchy and omit scope not required by the role
   assert.deepEqual([payloads[1].cityId, payloads[1].mahalliId, payloads[1].sectorId], [null, null, null]);
   change(0, "SECTOR_ADMIN");
   assert.deepEqual(selection(), ["SECTOR_ADMIN", "semarang", "m1", "s1"]);
+});
+
+test("Musyrif form requests only city and sends null lower-level scope", async () => {
+  change(1, "uat");
+  assert.deepEqual(selection(), ["MUSYRIF", "uat"]);
+  await submit();
+  assert.deepEqual([payloads[0].cityId, payloads[0].mahalliId, payloads[0].sectorId], ["uat", null, null]);
 });

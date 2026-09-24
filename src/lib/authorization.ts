@@ -1,4 +1,4 @@
-import type { GroupStatus, Role } from "@prisma/client";
+import type { GroupStatus, Role, Prisma } from "@prisma/client";
 import type { GroupWithScope, SessionUser } from "./types";
 
 export class AuthorizationError extends Error {
@@ -64,16 +64,8 @@ export function canCreateUserRole(
 export function isAssignedMusyrif(currentUser: SessionUser, group: GroupWithScope) {
   if (currentUser.role !== "MUSYRIF") return false;
 
-  // New write paths load tenures; legacy readers retain the mirrored UserGroup path.
-  if (group.assignments) {
-    return Boolean(currentUser.cityId && currentUser.cityId === group.sector?.mahalli?.cityId
-      && group.assignments.some(assignment => assignment.musyrifId === currentUser.userId && assignment.endedAt === null));
-  }
-  return Boolean(
-    group.userGroups?.some((assignment) => {
-      return assignment.userId === currentUser.userId || assignment.user?.id === currentUser.userId;
-    }),
-  );
+  return Boolean(currentUser.cityId && currentUser.cityId === group.sector?.mahalli?.cityId
+    && group.assignments?.some(assignment => assignment.musyrifId === currentUser.userId && assignment.endedAt === null));
 }
 
 export function canViewGroup(currentUser: SessionUser, group: GroupWithScope) {
@@ -91,7 +83,7 @@ export function canViewGroup(currentUser: SessionUser, group: GroupWithScope) {
     return Boolean(currentUser.sectorId && group.sectorId === currentUser.sectorId);
   }
 
-  return isAssignedMusyrif(currentUser, group);
+  return Boolean(group.assignments?.some(assignment => assignment.musyrifId === currentUser.userId));
 }
 
 export function canManageGroup(currentUser: SessionUser, group: GroupWithScope) {
@@ -121,7 +113,7 @@ export function getAccessibleGroupsWhere(currentUser: SessionUser) {
     return { sectorId: currentUser.sectorId ?? "__none__" };
   }
 
-  return { userGroups: { some: { userId: currentUser.userId } } };
+  return { assignments: { some: { musyrifId: currentUser.userId } } };
 }
 
 export function assertGroupAccess(
@@ -144,4 +136,32 @@ export function assertMeetingAccess(currentUser: SessionUser, group: GroupWithSc
   if (!canManageMeeting(currentUser, group)) {
     throw new AuthorizationError("Anda tidak memiliki akses untuk mengelola pertemuan kelompok ini.");
   }
+}
+
+
+export function getSessionAccessWhere(user: SessionUser, mode: "active" | "history" | "all" = "active"): Prisma.AttendanceSessionWhereInput {
+  if (user.role !== "MUSYRIF") return { group: getAccessibleGroupsWhere(user) };
+  return { assignment: { musyrifId: user.userId,
+    ...(mode === "active" ? { endedAt: null, group: { sector: { mahalli: { cityId: user.cityId ?? "__none__" } } } }
+      : mode === "history" ? { endedAt: { not: null } } : {}),
+  } };
+}
+
+type SessionAccess = {
+  groupId: string; group: GroupWithScope;
+  assignment: { id: string; groupId: string; musyrifId: string; endedAt: Date | null } | null;
+};
+export function canEditSession(user: SessionUser, session: SessionAccess) {
+  if (session.group.status === "DELETED") return false;
+  if (user.role !== "MUSYRIF") return canManageGroup(user, session.group);
+  return Boolean(session.assignment && session.assignment.groupId === session.groupId
+    && session.assignment.musyrifId === user.userId && session.assignment.endedAt === null
+    && isAssignedMusyrif(user, session.group));
+}
+export function assertSessionAccess(user: SessionUser, session: SessionAccess, action: "view" | "manage" = "view") {
+  const owns = session.assignment?.groupId === session.groupId && session.assignment.musyrifId === user.userId;
+  const allowed = user.role === "MUSYRIF"
+    ? owns && (action === "view" || (session.assignment?.endedAt === null && isAssignedMusyrif(user, session.group)))
+    : canManageGroup(user, session.group);
+  if (!allowed) throw new AuthorizationError();
 }

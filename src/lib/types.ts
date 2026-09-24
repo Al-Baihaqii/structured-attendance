@@ -22,12 +22,7 @@ export type GroupWithScope = {
     } | null;
   } | null;
   assignments?: { id: string; musyrifId: string; endedAt: Date | null }[];
-  userGroups?: {
-    userId?: string;
-    user?: {
-      id: string;
-    };
-  }[];
+
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

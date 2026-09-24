@@ -18,7 +18,7 @@ export async function GET() {
           ? { mahalliId: currentUser.mahalliId ?? "__none__" }
           : currentUser.role === "SECTOR_ADMIN"
             ? { sectorId: currentUser.sectorId ?? "__none__" }
-            : { userGroups: { some: { userId: currentUser.userId } } };
+            : { id: currentUser.userId };
     const users = await prisma.user.findMany({
       where,
       select: { id: true, username: true, name: true, email: true, role: true, isActive: true, cityId: true, mahalliId: true, sectorId: true, city: { select: { name: true } }, mahalli: { select: { name: true } }, sector: { select: { name: true } } },

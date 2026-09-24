@@ -20,8 +20,8 @@ const db = {
     assert.equal(args.include.mahalli.include.city, true);
     return destination;
   } },
-  userGroup: { findMany: async (args: any) => {
-    assert.deepEqual(args.where, { groupId: "g1", user: { role: "MUSYRIF" } });
+  groupAssignment: { findMany: async (args: any) => {
+    assert.deepEqual(args.where, { groupId: "g1", endedAt: null });
     return assignments;
   } },
   // Stage writes until the callback succeeds, modelling Prisma transaction commit/rollback.
@@ -31,7 +31,7 @@ const db = {
     const result = await fn({
       $queryRaw: async () => [],
       sector: db.sector,
-      userGroup: db.userGroup,
+      groupAssignment: db.groupAssignment,
       group: { findUnique: db.group.findUnique, update: async ({ data }: any) => {
         writes.push("group");
         pendingGroup = { ...pendingGroup, ...Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)) };
@@ -86,26 +86,19 @@ for (const role of ["CITY_ADMIN", "MAHALLI_ADMIN"] as const) {
     });
   });
 }
-test("SUPER_ADMIN can transfer across cities and retain conflicting assignments", async () => {
-  user.role = "SUPER_ADMIN";
-  destination = sector("s2", "h2", "c2");
+test("SUPER_ADMIN cannot transfer across cities with active tenure", async () => {
+  user.role = "SUPER_ADMIN"; destination = sector("s2", "h2", "c2");
   assignments = [{ user: { sectorId: "s1" } }];
+  const response = await call();
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).code, "GROUP_ASSIGNMENT_SCOPE_CONFLICT");
+  assert.deepEqual(writes, []); assert.deepEqual(logs, []);
+});
+test("SUPER_ADMIN can transfer across cities without active tenure", async () => {
+  user.role = "SUPER_ADMIN"; destination = sector("s2", "h2", "c2");
   assert.equal((await call()).status, 200);
   assert.equal(group.sectorId, "s2");
-  assert.deepEqual(logs[0].metadata.destinationScope, { cityId: "c2", mahalliId: "h2", sectorId: "s2" });
-  assert.deepEqual(assignments, [{ user: { sectorId: "s1" } }]);
 });
-for (const conflictingSector of ["s1", null]) {
-  test(`conflicting assignment (${conflictingSector}) after valid assignment rejects without writes`, async () => {
-    assignments = [{ user: { sectorId: "s2" } }, { user: { sectorId: conflictingSector } }];
-    const response = await call();
-    assert.equal(response.status, 409);
-    assert.equal((await response.json()).code, "GROUP_ASSIGNMENT_SCOPE_CONFLICT");
-    assert.deepEqual(writes, []);
-    assert.deepEqual(logs, []);
-    assert.equal(group.sectorId, "s1");
-  });
-}
 test("missing destination rejected without writes", async () => {
   destination = null;
   assert.equal((await call()).status, 404);

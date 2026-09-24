@@ -16,8 +16,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       include: {
         sector: { include: { mahalli: { include: { city: true } } } },
         members: { orderBy: { name: "asc" } },
-        userGroups: { where: { user: { role: "MUSYRIF", isActive: true } }, include: { user: { select: { id: true, name: true, username: true } } } },
-        assignmentHistory: { orderBy: { createdAt: "desc" }, take: 8, include: { changedBy: { select: { name: true } }, } },
+        assignments: { include: { musyrif: { select: { id: true, name: true, username: true } } } },
+        assignmentHistory: { where: currentUser.role === "MUSYRIF" ? { id: "__none__" } : {}, orderBy: { createdAt: "desc" }, take: 8, include: { changedBy: { select: { name: true } }, } },
       },
     });
     if (!group) return NextResponse.json({ error: "Kelompok tidak ditemukan." }, { status: 404 });
@@ -47,13 +47,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         });
         if (!sector) return NextResponse.json({ error: "Sektor tidak ditemukan." }, { status: 404 });
         assertGroupAccess(currentUser, { id, sectorId: sector.id, sector }, "manage");
-        const assignments = await tx.userGroup.findMany({
-          where: { groupId: id, user: { role: "MUSYRIF" } },
-          select: { user: { select: { sectorId: true } } },
+        const assignments = await tx.groupAssignment.findMany({
+          where: { groupId: id, endedAt: null },
+          select: { id: true },
         });
-        if (currentUser.role !== "SUPER_ADMIN" && assignments.some(({ user }) => user.sectorId !== sector.id)) {
+        if (assignments.length > 0 && group.sector.mahalli.cityId !== sector.mahalli.cityId) {
           return NextResponse.json({
-            error: "Penugasan Musyrif tidak sesuai dengan sektor tujuan. Cabut penugasan sebelum memindahkan kelompok.",
+            error: "Kelompok dengan penugasan aktif tidak dapat dipindahkan ke kota lain. Cabut penugasan sebelum memindahkan kelompok.",
             code: "GROUP_ASSIGNMENT_SCOPE_CONFLICT",
           }, { status: 409 });
         }

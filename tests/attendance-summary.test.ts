@@ -1,3 +1,4 @@
+import { getSessionAccessWhere } from "../src/lib/authorization";
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -32,13 +33,15 @@ let status: string;
 let records: { status: AttendanceStatus }[];
 let queries: number;
 let missing: boolean;
+let endedAt: Date | null;
+let formRenders: number;
 const prismaPath = require.resolve("../src/lib/prisma"); require(prismaPath);
 require.cache[prismaPath]!.exports = { prisma: {
   attendanceSession: { findFirst: async ({ where }: any) => {
-    assert.deepEqual(where, { id: "a1", groupId: "g1" });
+    assert.deepEqual(where, { id: "a1", groupId: "g1", ...getSessionAccessWhere(user, "all") });
     if (missing) return null;
-    return { id: "a1", meetingNumber: 1, attendanceVersion: 0, date: new Date("2026-09-16"), records: [], group: {
-      id: "g1", name: "Group", status, sectorId: "s1", members: [], userGroups: [{ userId: "u1" }],
+    return { id: "a1", groupId: "g1", assignment: { id: "t1", groupId: "g1", musyrifId: "u1", endedAt }, meetingNumber: 1, attendanceVersion: 0, date: new Date("2026-09-16"), records: [], group: {
+      id: "g1", name: "Group", status, sectorId: "s1", members: [], assignments: [{ id: "t1", musyrifId: "u1", endedAt: null }],
       sector: { name: "Sector", mahalliId: "h1", mahalli: { name: "Mahalli", cityId: "c1", city: { name: "City" } } },
     } };
   } },
@@ -51,12 +54,12 @@ require.cache[prismaPath]!.exports = { prisma: {
 const authPath = require.resolve("../src/lib/auth"); require(authPath);
 require.cache[authPath]!.exports = { getSession: async () => user };
 const formPath = require.resolve("../src/components/attendance-form"); require(formPath);
-require.cache[formPath]!.exports = { AttendanceForm: () => null };
+require.cache[formPath]!.exports = { AttendanceForm: () => { formRenders++; return null; } };
 const Page = require("../src/app/dashboard/groups/[id]/sessions/[sessionId]/page").default;
 const page = () => Page({ params: Promise.resolve({ id: "g1", sessionId: "a1" }) });
 beforeEach(() => {
   user = { userId: "u1", role: "SUPER_ADMIN", cityId: "c1", mahalliId: "h1", sectorId: "s1" };
-  status = "ACTIVE"; queries = 0; records = []; missing = false;
+  endedAt = null; formRenders = 0; status = "ACTIVE"; queries = 0; records = []; missing = false;
 });
 test("empty summary renders Indonesian empty state", async () => {
   assert.match(renderToStaticMarkup(await page()), /Belum ada data/);
@@ -86,4 +89,11 @@ test("unauthenticated request cannot query summary", async () => {
   user = null;
   await assert.rejects(page());
   assert.equal(queries, 0);
+});
+
+test("former Musyrif direct session URL renders history without attendance controls", async () => {
+  user.role = "MUSYRIF"; endedAt = new Date();
+  const html = renderToStaticMarkup(await page());
+  assert.match(html, /hanya baca/);
+  assert.equal(formRenders, 0);
 });

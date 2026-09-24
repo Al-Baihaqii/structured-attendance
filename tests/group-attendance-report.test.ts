@@ -41,7 +41,7 @@ const { getGroupAttendanceReport, reportDateSchema } = require("../src/lib/group
 const report = (parameters = {}) => getGroupAttendanceReport(user, "g1", parameters);
 beforeEach(() => {
   user = { userId: "u1", role: "SUPER_ADMIN", name: "Admin", username: "admin", cityId: "c1", mahalliId: "h1", sectorId: "s1", sessionVersion: 0 };
-  group = { id: "g1", sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, userGroups: [{ userId: "u1" }] };
+  group = { id: "g1", sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, assignments: [{ id: "t1", musyrifId: "u1", endedAt: null }] };
   sessions = []; records = []; calls = [];
 });
 const session = (id: string, date = "2026-09-16", groupId = "g1") => ({ id, groupId, meetingNumber: 1, date: new Date(`${date}T00:00:00.000Z`) });

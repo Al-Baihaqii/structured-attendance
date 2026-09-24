@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { requireAuth } from "@/lib/auth";
-import { assertMeetingAccess, assertGroupMutable } from "@/lib/authorization";
+import { assertSessionAccess, assertGroupMutable } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { apiError, ok } from "@/lib/api";
 import { attendanceBatchSchema } from "@/lib/validators";
@@ -15,9 +15,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const memberIds = input.records.map((record) => record.memberId);
     return await prisma.$transaction(async (tx) => {
       await lockGroup(tx, groupId);
-      const session = await tx.attendanceSession.findFirst({ where: { id: sessionId, groupId }, include: { group: { include: { sector: { include: { mahalli: true } }, userGroups: true } } } });
+      const session = await tx.attendanceSession.findFirst({ where: { id: sessionId, groupId }, include: { assignment: true, group: { include: { sector: { include: { mahalli: true } }, assignments: { where: { endedAt: null } } } } } });
       if (!session) return NextResponse.json({ error: "Pertemuan tidak ditemukan." }, { status: 404 });
-      assertMeetingAccess(currentUser, session.group);
+      assertSessionAccess(currentUser, session, "manage");
       assertGroupMutable(session.group);
       const members = await tx.member.findMany({ where: { groupId, id: { in: memberIds } }, select: { id: true } });
       if (members.length !== input.records.length) return NextResponse.json({ error: "Anggota tidak ditemukan atau bukan anggota kelompok ini." }, { status: 400 });

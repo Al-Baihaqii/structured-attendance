@@ -15,6 +15,8 @@ let records: any[];
 let members: any[];
 function matches(row: any, where: any): boolean {
   return Object.entries(where || {}).every(([key, value]: [string, any]) => {
+    if (key === "not") return row !== value;
+    if (row === null || row === undefined) return false;
     if (key === "gte") return row >= value;
     if (key === "lt") return row < value;
     if (key === "AND") return value.every((part: any) => matches(row, part));
@@ -78,9 +80,9 @@ beforeEach(() => {
   cities = [1, 2].map(i => ({ id: `c${i}`, name: `City ${i}` }));
   mahallis = [1, 2, 3].map(i => ({ id: `h${i}`, name: `Mahalli ${i}`, cityId: i === 3 ? "c2" : "c1" }));
   sectors = [1, 2, 3].map(i => ({ id: `s${i}`, name: `Sector ${i}`, mahalliId: `h${i}` }));
-  groups = [1, 2, 3].map(i => ({ id: `g${i}`, name: `Group ${i}`, status: i === 1 ? "DELETED" : "ACTIVE", sectorId: `s${i}`, userGroups: i === 1 ? [{ userId: "u1" }] : [] }));
+  groups = [1, 2, 3].map(i => ({ id: `g${i}`, name: `Group ${i}`, status: i === 1 ? "DELETED" : "ACTIVE", sectorId: `s${i}`, assignments: i === 1 ? [{ id: "t1", musyrifId: "u1", endedAt: null }] : [] }));
   attach();
-  sessions = groups.map((group, i) => ({ id: `a${i+1}`, groupId: group.id, group }));
+  sessions = groups.map((group, i) => ({ id: `a${i+1}`, groupId: group.id, group, assignment: group.assignments[0] ? { ...group.assignments[0], group } : null }));
   records = sessions.flatMap((session, i) => Array.from({ length: i === 1 ? 9 : 1 }, () => ({ sessionId: session.id, session, status: i === 0 ? "HADIR" : "IZIN" })));
   members = [];
   calls = [];
@@ -110,7 +112,7 @@ for (const role of ["CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"] as
   });
 }
 test("assigned MUSYRIF follows assignments outside their own sector", async () => {
-  user.role = "MUSYRIF"; groups[0].userGroups = []; groups[2].userGroups = [{ userId: "u1" }];
+  user.role = "MUSYRIF"; groups[0].assignments = []; groups[2].assignments = [{ id: "t1", musyrifId: "u1", endedAt: null }];
   assert.deepEqual((await report()).rows.map(r => r.id), ["c2"]);
 });
 test("empty groups and empty authorized cities remain visible", async () => {
@@ -136,8 +138,8 @@ test("unscoped administrators fail closed", async () => {
 });
 test("bulk query count is independent of group and session count", async () => {
   for (let i = 4; i < 104; i++) {
-    const group = { id: `g${i}`, name: "Group", sectorId: "s1", status: "INACTIVE", userGroups: [] };
-    groups.push(group); sessions.push({ id: `a${i}`, groupId: group.id, group });
+    const group: any = { id: `g${i}`, name: "Group", sectorId: "s1", status: "INACTIVE", assignments: [] };
+    groups.push(group); sessions.push({ id: `a${i}`, groupId: group.id, group, assignment: group.assignments[0] ? { ...group.assignments[0], group } : null });
   }
   attach(); await report();
   assert.deepEqual(calls, ["city.many", "group.many", "session.many", "aggregate"]);
@@ -145,7 +147,7 @@ test("bulk query count is independent of group and session count", async () => {
 
 test("same period reconciles member, group, and hierarchy totals including inactive and deleted history", async () => {
   const group = groups[0]; // DELETED, still readable.
-  members = ["m1", "m2"].map((id, i) => ({ id, name: id, isActive: i === 0, groupId: group.id, group }));
+  members = ["m1", "m2"].map((id, i) => ({ id, name: id, isActive: i === 0, groupId: group.id, group, assignment: group.assignments[0] ? { ...group.assignments[0], group } : null }));
   sessions = ["2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17"].map((date, i) => ({ id: `a${i}`, meetingNumber: i, groupId: group.id, group, date: new Date(`${date}T00:00:00Z`) }));
   records = [
     { id: "before", memberId: "m1", sessionId: "a0", session: sessions[0], status: "ALPA" },
@@ -178,4 +180,37 @@ test("same period reconciles member, group, and hierarchy totals including inact
   assert.deepEqual(transferred.rows[1].counts, combined);
   assert.deepEqual((await getGroupAttendanceReport(user, "g1", period)).counts, combined);
   assert.deepEqual((await getMemberAttendanceHistory(user, "g1", "m2", period)).summary.counts, memberReports[1].summary.counts);
+});
+
+
+test("all report paths isolate active workspace and closed tenure history", async () => {
+  const group = groups[0];
+  const old = { id: "old", groupId: group.id, musyrifId: "u1", endedAt: new Date(), group };
+  const active = { id: "new", groupId: group.id, musyrifId: "replacement", endedAt: null, group };
+  group.assignments = [old, active];
+  sessions = [old, active].map((assignment, i) => ({ id: `t-session-${i}`, groupId: group.id, group, assignment, meetingNumber: i + 1, date: new Date("2026-09-20") }));
+  records = sessions.map((session, i) => ({ id: `record-${i}`, memberId: "member", sessionId: session.id, session, status: i ? "ALPA" : "HADIR" }));
+  members = [{ id: "member", name: "Inactive Member", isActive: false, groupId: group.id, group }];
+  const totals = async (parameters = {}) => {
+    const g = await getGroupAttendanceReport(user, group.id, parameters);
+    const m = await getMemberAttendanceHistory(user, group.id, "member", parameters);
+    const h = await report({ cityId: "c1", mahalliId: "h1", sectorId: "s1", ...parameters });
+    assert.deepEqual(g.counts, m.summary.counts);
+    assert.deepEqual(g.counts, h.rows[0].counts);
+    return g;
+  };
+  user.role = "MUSYRIF";
+  assert.equal((await totals()).totalRecorded, 0);
+  const oldReport = await totals({ history: "1" });
+  assert.equal(oldReport.totalRecorded, 1); assert.equal(oldReport.counts.HADIR, 1);
+  user.userId = "replacement";
+  const newReport = await totals();
+  assert.equal(newReport.totalRecorded, 1); assert.equal(newReport.counts.ALPA, 1);
+  assert.equal((await totals({ history: "1" })).totalRecorded, 0);
+  user.role = "SUPER_ADMIN";
+  assert.equal((await totals()).totalRecorded, 2);
+  // Returning Musyrif still sees only the new tenure in their active workspace.
+  active.musyrifId = "u1"; user.role = "MUSYRIF"; user.userId = "u1";
+  assert.equal((await totals()).counts.ALPA, 1);
+  assert.equal((await totals({ history: "1" })).counts.HADIR, 1);
 });

@@ -22,8 +22,8 @@ test("meeting notes are optional and limited to 1000 characters", () => {
 });
 
 test("meeting access allows assigned musyrif and rejects unassigned musyrif", () => {
-  const user: SessionUser = { userId: "u-1", username: "tester", name: "Tester", role: "MUSYRIF", cityId: null, mahalliId: null, sectorId: null, sessionVersion: 0 };
-  const group = { id: "g-1", sectorId: "s-1", userGroups: [{ userId: "u-1" }] };
+  const user: SessionUser = { userId: "u-1", username: "tester", name: "Tester", role: "MUSYRIF", cityId: "c1", mahalliId: null, sectorId: null, sessionVersion: 0 };
+  const group = { id: "g-1", sectorId: "s-1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, assignments: [{ id: "t1", musyrifId: "u-1", endedAt: null }] };
   assert.doesNotThrow(() => assertMeetingAccess(user, group));
-  assert.throws(() => assertMeetingAccess(user, { ...group, userGroups: [] }));
+  assert.throws(() => assertMeetingAccess(user, { ...group, assignments: [] }));
 });

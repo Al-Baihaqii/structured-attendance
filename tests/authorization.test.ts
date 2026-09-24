@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canManageGroup, canViewGroup, getAccessibleGroupsWhere } from "../src/lib/authorization";
+import { canManageGroup, canViewGroup, getAccessibleGroupsWhere, assertSessionAccess, canEditSession } from "../src/lib/authorization";
 import type { SessionUser } from "../src/lib/types";
 
 const user = (overrides: Partial<SessionUser>): SessionUser => ({
@@ -47,5 +47,27 @@ test("SUPER_ADMIN can access and manage all groups", () => {
 
 test("MUSYRIF group query is limited to assigned groups", () => {
   const musyrif = user({ role: "MUSYRIF", userId: "musyrif-1" });
-  assert.deepEqual(getAccessibleGroupsWhere(musyrif), { userGroups: { some: { userId: "musyrif-1" } } });
+  assert.deepEqual(getAccessibleGroupsWhere(musyrif), { assignments: { some: { musyrifId: "musyrif-1" } } });
+});
+
+test("session tenure ownership is independent of current group assignment", () => {
+  const old = { id: "old", groupId: "g-1", musyrifId: "old-user", endedAt: new Date() };
+  const active = { id: "new", groupId: "g-1", musyrifId: "new-user", endedAt: null };
+  const g = { ...group(), status: "ACTIVE", assignments: [old, active] };
+  const session = { groupId: g.id, group: g, assignment: old };
+  const former = user({ userId: "old-user" });
+  const replacement = user({ userId: "new-user" });
+  assert.doesNotThrow(() => assertSessionAccess(former, session));
+  assert.throws(() => assertSessionAccess(former, session, "manage"));
+  assert.equal(canEditSession(former, session), false);
+  assert.throws(() => assertSessionAccess(replacement, session));
+  assert.throws(() => assertSessionAccess(replacement, session, "manage"));
+  assert.doesNotThrow(() => assertSessionAccess(replacement, { ...session, assignment: active }, "manage"));
+  assert.throws(() => assertSessionAccess(replacement, { ...session, assignment: null }));
+  assert.doesNotThrow(() => assertSessionAccess(user({ role: "CITY_ADMIN" }), session, "manage"));
+  assert.equal(canEditSession(replacement, { ...session, assignment: active, group: { ...g, status: "DELETED" } }), false);
+});
+test("legacy UserGroup cannot grant access after the tenure cutover", () => {
+  const g = { ...group(), userGroups: [{ userId: "u-1" }], assignments: [] };
+  assert.equal(canViewGroup(user({}), g), false);
 });

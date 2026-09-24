@@ -1,3 +1,4 @@
+import { getSessionAccessWhere } from "../src/lib/authorization";
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -20,7 +21,7 @@ const tx = {
   attendanceRecord: { findMany: async (args: any) => {
     calls.push("records");
     assert.deepEqual(args, {
-      where: { memberId: "m1", session: { groupId: "g1" } },
+      where: { memberId: "m1", session: { groupId: "g1", ...getSessionAccessWhere(user) } },
       select: { id: true, status: true, session: { select: { meetingNumber: true, date: true } } },
       orderBy: [{ session: { date: "desc" } }, { id: "desc" }],
     });
@@ -40,7 +41,7 @@ const page = () => Page({ params: Promise.resolve({ id: "g1", memberId: "m1" }) 
 beforeEach(() => {
   user = { userId: "u1", role: "SUPER_ADMIN", cityId: "c1", mahalliId: "h1", sectorId: "s1" };
   member = { id: "m1", name: "Member", isActive: true, group: {
-    id: "g1", name: "Group", status: "ACTIVE", sectorId: "s1", userGroups: [{ userId: "u1" }],
+    id: "g1", name: "Group", status: "ACTIVE", sectorId: "s1", assignments: [{ id: "t1", musyrifId: "u1", endedAt: null }],
     sector: { name: "Sector", mahalliId: "h1", mahalli: { name: "Mahalli", cityId: "c1", city: { name: "City" } } },
   } };
   records = ["HADIR", "IZIN", "SAKIT", "ALPA"].map((status, i) => ({ id: String(i), status, session: { meetingNumber: 4-i, date: new Date(`2026-09-${20-i}`) } }));
