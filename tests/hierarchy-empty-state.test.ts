@@ -1,3 +1,5 @@
+import { getHierarchyReadScope } from "../src/lib/read-scope";
+import { getAccessibleGroupsWhere } from "../src/lib/authorization";
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -18,7 +20,7 @@ const formPath = require.resolve("../src/components/management-forms"); require(
 require.cache[formPath]!.exports = { CreateHierarchyForm: (props: any) => { forms.push({ type: props.type, parentId: props.parentId }); return React.createElement("form"); } };
 const Page = require("../src/app/dashboard/wilayah/page").default;
 const render = async () => renderToStaticMarkup(await Page());
-beforeEach(() => { user = { role: "SUPER_ADMIN", cityId: "c1" }; cities = []; forms = []; query = undefined; });
+beforeEach(() => { user = { role: "SUPER_ADMIN", userId: "u1", cityId: "c1", mahalliId: "h1", sectorId: "s1" }; cities = []; forms = []; query = undefined; });
 test("empty database offers the first city form", async () => {
   assert.match(await render(), /Belum ada kota yang tersedia/);
   assert.deepEqual(forms, [{ type: "city", parentId: undefined }]);
@@ -48,7 +50,11 @@ for (const [role, types] of [
   test(`${role} retains existing controls and city query scope`, async () => {
     user.role = role; cities = populated(); await render();
     assert.deepEqual(forms.map(f => f.type), types);
-    assert.deepEqual(query.where, { id: "c1", isActive: true });
+    const scope = getHierarchyReadScope(user);
+    assert.deepEqual(query.where, { ...scope.city, isActive: true });
+    assert.deepEqual(query.include.mahallis.where, { ...scope.mahalli, isActive: true });
+    assert.deepEqual(query.include.mahallis.include.sectors.where, { ...scope.sector, isActive: true });
+    assert.deepEqual(query.include.mahallis.include.sectors.include._count.select.groups.where, getAccessibleGroupsWhere(user));
   });
 }
 test("CITY_ADMIN can create the first Mahalli but not a city", async () => {

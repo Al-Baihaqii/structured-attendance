@@ -1,3 +1,4 @@
+import { mutationRequest } from "./helpers/request";
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -24,7 +25,7 @@ require.cache[prismaPath]!.exports = { prisma: { $transaction: async (fn: any) =
 const authPath = require.resolve("../src/lib/auth"); require(authPath);
 require.cache[authPath]!.exports = { requireAuth: async () => { if (!user) throw new Error("Unauthorized"); return user; } };
 const { POST } = require("../src/app/api/groups/route");
-const call = () => POST(new Request("http://localhost/api/groups", { method: "POST", body: JSON.stringify({ name: "Kelompok baru", sectorId: "s1" }) }));
+const call = () => POST(mutationRequest("http://localhost/api/groups", { method: "POST", body: JSON.stringify({ name: "Kelompok baru", sectorId: "s1" }) }));
 beforeEach(() => {
   user = { userId: "u1", role: "SUPER_ADMIN", cityId: "c1", mahalliId: "h1", sectorId: "s1" };
   sector = { id: "s1", isActive: true, mahalliId: "h1", mahalli: { cityId: "c1" } };

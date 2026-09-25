@@ -1,3 +1,4 @@
+import { mutationRequest } from "./helpers/request";
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -37,7 +38,7 @@ const authPath = require.resolve("../src/lib/auth"); require(authPath);
 require.cache[authPath]!.exports = { requireAuth: async () => user };
 const { POST } = require("../src/app/api/groups/[id]/members/route");
 const { PATCH, DELETE } = require("../src/app/api/members/[id]/route");
-const call = (handler: any, body = { name: "Changed" }) => handler(new Request("http://localhost/test", { method: handler === DELETE ? "DELETE" : "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id: handler === POST ? "g1" : "m1" }) });
+const call = (handler: any, body = { name: "Changed" }) => handler(mutationRequest("http://localhost/test", { method: handler === DELETE ? "DELETE" : "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id: handler === POST ? "g1" : "m1" }) });
 beforeEach(() => {
   user = { userId: "u1", role: "SUPER_ADMIN", cityId: "c1", mahalliId: "h1", sectorId: "s1" };
   group = { id: "g1", status: "ACTIVE", sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } } };

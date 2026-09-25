@@ -1,3 +1,4 @@
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -9,9 +10,10 @@ import { assignmentSchema } from "@/lib/validators";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     const { id: groupId } = await params;
-    const input = assignmentSchema.parse(await request.json());
+    const input = assignmentSchema.parse(await readJsonRequest(request));
     return await prisma.$transaction(async (tx) => {
       await lockGroup(tx, groupId);
       const group = await tx.group.findUnique({ where: { id: groupId }, include: { sector: { include: { mahalli: true } } } });
@@ -39,8 +41,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, false);
     const currentUser = await requireAuth();
     const { id: groupId } = await params;
     return await prisma.$transaction(async (tx) => {

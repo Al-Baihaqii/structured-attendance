@@ -1,3 +1,5 @@
+import { getAccessibleUsersWhere } from "@/lib/read-scope";
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -10,15 +12,7 @@ import { validateUserScope } from "@/lib/user-scope";
 export async function GET() {
   try {
     const currentUser = await requireAuth();
-    const where = currentUser.role === "SUPER_ADMIN"
-      ? {}
-      : currentUser.role === "CITY_ADMIN"
-        ? { cityId: currentUser.cityId ?? "__none__" }
-        : currentUser.role === "MAHALLI_ADMIN"
-          ? { mahalliId: currentUser.mahalliId ?? "__none__" }
-          : currentUser.role === "SECTOR_ADMIN"
-            ? { sectorId: currentUser.sectorId ?? "__none__" }
-            : { id: currentUser.userId };
+    const where = getAccessibleUsersWhere(currentUser);
     const users = await prisma.user.findMany({
       where,
       select: { id: true, username: true, name: true, email: true, role: true, isActive: true, cityId: true, mahalliId: true, sectorId: true, city: { select: { name: true } }, mahalli: { select: { name: true } }, sector: { select: { name: true } } },
@@ -32,9 +26,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"]);
-    const input = userSchema.parse(await request.json());
+    const input = userSchema.parse(await readJsonRequest(request));
     if (!input.password) return NextResponse.json({ error: "Password wajib diisi untuk pengguna baru." }, { status: 400 });
     const scope = await validateUserScope(input.role, input);
     if (!canCreateUserRole(currentUser, input.role, scope)) {

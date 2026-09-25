@@ -1,3 +1,4 @@
+import { mutationRequest } from "./helpers/request";
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -74,7 +75,7 @@ require.cache[authPath]!.exports = {
   hashPassword: async (password: string) => { hashes.push(password); return "hashed-password"; },
 };
 const { POST } = require("../src/app/api/users/route");
-const create = (overrides = {}) => POST(new Request("http://localhost/api/users", {
+const create = (overrides = {}) => POST(mutationRequest("http://localhost/api/users", {
   method: "POST", body: JSON.stringify({ username: "newuser", name: "New User", password: "password123", role: "MUSYRIF", cityId: "c1", sectorId: "s1", ...overrides }),
 }));
 beforeEach(() => { activeAssignments = 0; actorRole = "CITY_ADMIN"; afterUserLock = undefined; lockEvents = []; users = []; logs = []; mode = ""; transactions = 0; hashes = []; });
@@ -92,7 +93,7 @@ test("user creation commits the user and corresponding activity log", async () =
 });
 test("ActivityLog failure rolls back the created user", async () => {
   mode = "log";
-  assert.equal((await create()).status, 400);
+  assert.equal((await create()).status, 500);
   assert.deepEqual(users, []);
   assert.deepEqual(logs, []);
 });
@@ -121,7 +122,7 @@ test("unauthorized scope is rejected before hashing or transaction", async () =>
 });
 
 const { PATCH, DELETE } = require("../src/app/api/users/[id]/route");
-const update = (body: object) => PATCH(new Request("http://localhost/api/users/target", {
+const update = (body: object) => PATCH(mutationRequest("http://localhost/api/users/target", {
   method: "PATCH", body: JSON.stringify(body),
 }), { params: Promise.resolve({ id: "target" }) });
 const existingUser = () => ({ id: "target", username: "existing", name: "Existing User", email: null,
@@ -146,14 +147,14 @@ test("update log failure rolls back profile, password, and sessionVersion", asyn
   users = [existingUser()];
   const before = structuredClone(users);
   mode = "log";
-  assert.equal((await update({ name: "Updated User", password: "replacement123" })).status, 400);
+  assert.equal((await update({ name: "Updated User", password: "replacement123" })).status, 500);
   assert.equal(transactions, 1);
   assert.deepEqual(users, before);
   assert.deepEqual(logs, []);
 });
 
 
-const deactivate = () => DELETE(new Request("http://localhost/api/users/target", { method: "DELETE" }), { params: Promise.resolve({ id: "target" }) });
+const deactivate = () => DELETE(mutationRequest("http://localhost/api/users/target", { method: "DELETE" }), { params: Promise.resolve({ id: "target" }) });
 for (const input of [{ cityId: "c2" }, { role: "CITY_ADMIN" }]) {
   test(`active assignments block Musyrif change ${JSON.stringify(input)}`, async () => {
     actorRole = "SUPER_ADMIN"; activeAssignments = 2; users = [existingUser()];

@@ -2,14 +2,14 @@ import { z } from "zod";
 
 export const loginSchema = z.object({
   username: z.string().trim().min(1, "Username wajib diisi.").max(50),
-  password: z.string().min(1, "Password wajib diisi."),
+  password: z.string().min(1, "Password wajib diisi.").refine(value => new TextEncoder().encode(value).length <= 4096, "Password terlalu panjang."),
 });
 
 export const userSchema = z.object({
   username: z.string().trim().min(3, "Username minimal 3 karakter.").max(30).regex(/^[a-zA-Z0-9._-]+$/, "Username hanya boleh berisi huruf, angka, titik, garis bawah, atau strip."),
   name: z.string().trim().min(2, "Nama wajib diisi.").max(100),
   email: z.string().trim().email("Email tidak valid.").optional().or(z.literal("")),
-  password: z.string().min(8, "Password minimal 8 karakter.").optional(),
+  password: z.string().min(8, "Password minimal 8 karakter.").refine(value => new TextEncoder().encode(value).length <= 72, "Password maksimal 72 byte UTF-8.").optional(),
   role: z.enum(["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"]),
   cityId: z.string().nullable().optional(),
   mahalliId: z.string().nullable().optional(),

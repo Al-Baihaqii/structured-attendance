@@ -14,7 +14,6 @@ export function LoginForm() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (loading) return;
-    console.info("[login] submit started");
     setError("");
     setLoading(true);
     try {
@@ -26,19 +25,16 @@ export function LoginForm() {
         body: JSON.stringify({ username, password }),
       });
       const data = await response.json().catch(() => ({}));
-      console.info("[login] response received", { ok: response.ok, status: response.status });
 
       if (!response.ok) {
         setError(data.error || "Username atau password tidak sesuai.");
         return;
       }
 
-      console.info("[login] success, redirecting");
       // Full navigation is intentional here: it guarantees the new HTTP-only cookie is read by the dashboard.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/dashboard");
     } catch {
-      console.error("[login] request failed");
       setError("Tidak dapat terhubung ke server. Silakan coba lagi.");
     } finally {
       setLoading(false);

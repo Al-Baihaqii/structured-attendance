@@ -1,3 +1,4 @@
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -25,9 +26,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"]);
-    const input = groupSchema.parse(await request.json());
+    const input = groupSchema.parse(await readJsonRequest(request));
     return await prisma.$transaction(async (tx) => {
       const sector = await tx.sector.findUnique({ where: { id: input.sectorId }, include: { mahalli: true } });
       if (!sector) return NextResponse.json({ error: "Sektor tidak ditemukan." }, { status: 404 });

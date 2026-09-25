@@ -1,3 +1,4 @@
+import { mutationRequest } from "./helpers/request";
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -54,7 +55,7 @@ require.cache[prismaPath]!.exports = { prisma: db };
 const authPath = require.resolve("../src/lib/auth"); require(authPath);
 require.cache[authPath]!.exports = { requireAuth: async () => user };
 const { PATCH } = require("../src/app/api/groups/[id]/route");
-const call = (body: object = { sectorId: "s2" }) => PATCH(new Request("http://localhost/api/groups/g1", { method: "PATCH", body: JSON.stringify(body) }), { params: Promise.resolve({ id: "g1" }) });
+const call = (body: object = { sectorId: "s2" }) => PATCH(mutationRequest("http://localhost/api/groups/g1", { method: "PATCH", body: JSON.stringify(body) }), { params: Promise.resolve({ id: "g1" }) });
 
 beforeEach(() => {
   user = { userId: "u1", username: "admin", name: "Admin", role: "CITY_ADMIN", cityId: "c1", mahalliId: "h1", sectorId: "s1", sessionVersion: 0 };

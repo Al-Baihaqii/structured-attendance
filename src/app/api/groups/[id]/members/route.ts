@@ -1,3 +1,4 @@
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -8,6 +9,7 @@ import { memberSchema } from "@/lib/validators";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     const { id: groupId } = await params;
     return await prisma.$transaction(async (tx) => {
@@ -15,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const group = await tx.group.findUnique({ where: { id: groupId }, include: { assignments: { where: { endedAt: null } }, sector: { include: { mahalli: true } } } });
       if (!group || !canManageMember(currentUser, group)) return NextResponse.json({ error: "Anda tidak memiliki akses ke anggota kelompok ini." }, { status: 403 });
       assertGroupMutable(group);
-      const input = memberSchema.parse(await request.json());
+      const input = memberSchema.parse(await readJsonRequest(request));
       const member = await tx.member.create({ data: { groupId, name: input.name } });
       await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "MEMBER", entityId: member.id, description: `Menambahkan anggota ${member.name}.` } });
       return ok({ member }, { status: 201 });

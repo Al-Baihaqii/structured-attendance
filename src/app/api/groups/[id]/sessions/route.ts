@@ -1,3 +1,4 @@
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -9,9 +10,10 @@ import { meetingAttendanceSchema } from "@/lib/validators";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     const { id: groupId } = await params;
-    const input = meetingAttendanceSchema.parse(await request.json());
+    const input = meetingAttendanceSchema.parse(await readJsonRequest(request));
     return await prisma.$transaction(async (tx) => {
       await lockGroup(tx, groupId);
       const group = await tx.group.findUnique({ where: { id: groupId }, include: { sector: { include: { mahalli: true } }, assignments: { where: { endedAt: null } } } });

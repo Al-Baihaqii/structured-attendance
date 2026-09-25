@@ -1,3 +1,4 @@
+import { mutationRequest } from "./helpers/request";
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -44,7 +45,7 @@ require.cache[prismaPath]!.exports = { prisma: { $transaction: async (fn: any, o
 const authPath = require.resolve("../src/lib/auth"); require(authPath);
 require.cache[authPath]!.exports = { requireAuth: async () => { if (!user) throw new Error("Unauthorized"); return user; } };
 const { POST } = require("../src/app/api/groups/[id]/sessions/route");
-const call = (records: any = [{ memberId: "m1", status: "HADIR" }]) => POST(new Request("http://localhost/test", { method: "POST", body: JSON.stringify({ meetingNumber: 999, date: "2026-09-16", records }) }), { params: Promise.resolve({ id: "g1" }) });
+const call = (records: any = [{ memberId: "m1", status: "HADIR" }]) => POST(mutationRequest("http://localhost/test", { method: "POST", body: JSON.stringify({ meetingNumber: 999, date: "2026-09-16", records }) }), { params: Promise.resolve({ id: "g1" }) });
 beforeEach(() => {
   user = { userId: "u1", role: "SUPER_ADMIN", cityId: "c1", mahalliId: "h1", sectorId: "s1" };
   group = { id: "g1", name: "Group", status: "ACTIVE", sectorId: "s1", sector: { mahalliId: "h1", mahalli: { cityId: "c1" } }, assignments: [{ id: "t1", musyrifId: "u1", endedAt: null }] };
@@ -136,7 +137,7 @@ test("attendance insert failure rolls back the new meeting and audit", async () 
 });
 for (const records of [undefined, [{ memberId: "m1", status: "HADIR" }, { memberId: "m1", status: "SAKIT" }], [{ memberId: "m1", status: "IZIN" }], [{ memberId: "m1", status: "ALPA", reason: "  " }]]) {
   test(`invalid combined input is rejected before locking: ${JSON.stringify(records)}`, async () => {
-    const response = records === undefined ? await POST(new Request("http://localhost/test", { method: "POST", body: JSON.stringify({ date: "2026-09-16" }) }), { params: Promise.resolve({ id: "g1" }) }) : await call(records);
+    const response = records === undefined ? await POST(mutationRequest("http://localhost/test", { method: "POST", body: JSON.stringify({ date: "2026-09-16" }) }), { params: Promise.resolve({ id: "g1" }) }) : await call(records);
     assert.equal(response.status, 400); assert.deepEqual(calls, []);
   });
 }

@@ -1,3 +1,5 @@
+import { getHierarchyReadScope } from "@/lib/read-scope";
+import { getAccessibleGroupsWhere } from "@/lib/authorization";
 import { Map } from "lucide-react";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -7,7 +9,8 @@ import { Card, SectionHeading } from "@/components/ui";
 export default async function WilayahPage() {
   const user = await getSession();
   if (!user) return null;
-  const cities = await prisma.city.findMany({ where: user.role === "SUPER_ADMIN" ? { isActive: true } : { id: user.cityId ?? "__none__", isActive: true }, include: { mahallis: { where: { isActive: true }, include: { sectors: { where: { isActive: true }, include: { _count: { select: { groups: true } } }, orderBy: { name: "asc" } } }, orderBy: { name: "asc" } } }, orderBy: { name: "asc" } });
+  const scope = getHierarchyReadScope(user);
+  const cities = await prisma.city.findMany({ where: { ...scope.city, isActive: true }, include: { mahallis: { where: { ...scope.mahalli, isActive: true }, include: { sectors: { where: { ...scope.sector, isActive: true }, include: { _count: { select: { groups: { where: getAccessibleGroupsWhere(user) } } } }, orderBy: { name: "asc" } } }, orderBy: { name: "asc" } } }, orderBy: { name: "asc" } });
   const allowedCity = user.role === "SUPER_ADMIN";
   const allowedMahalli = ["SUPER_ADMIN", "CITY_ADMIN"].includes(user.role);
   const allowedSector = ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN"].includes(user.role);

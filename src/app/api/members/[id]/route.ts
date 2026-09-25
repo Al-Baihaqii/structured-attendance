@@ -1,3 +1,4 @@
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
@@ -8,6 +9,7 @@ import { memberSchema } from "@/lib/validators";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     const { id } = await params;
     return await prisma.$transaction(async (tx) => {
@@ -17,7 +19,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const member = await tx.member.findUnique({ where: { id }, include: { group: { include: { assignments: { where: { endedAt: null } }, sector: { include: { mahalli: true } } } } } });
       if (!member || member.groupId !== target.groupId || !canManageMember(currentUser, member.group)) return NextResponse.json({ error: "Anggota tidak ditemukan atau berada di luar scope Anda." }, { status: 404 });
       assertGroupMutable(member.group);
-      const input = memberSchema.partial().parse(await request.json());
+      const input = memberSchema.partial().parse(await readJsonRequest(request));
       if (input.name === undefined || input.name === member.name) {
         const { group: _group, ...unchanged } = member;
         return ok({ member: unchanged });
@@ -31,8 +33,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, false);
     const currentUser = await requireAuth();
     const { id } = await params;
     return await prisma.$transaction(async (tx) => {

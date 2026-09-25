@@ -1,3 +1,5 @@
+import { HttpError } from "@/lib/http-error";
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { requireAuth } from "@/lib/auth";
@@ -9,9 +11,10 @@ import { lockGroup } from "@/lib/group-lock";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string; sessionId: string }> }) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     const { id: groupId, sessionId } = await params;
-    const input = attendanceBatchSchema.parse(await request.json());
+    const input = attendanceBatchSchema.parse(await readJsonRequest(request));
     const memberIds = input.records.map((record) => record.memberId);
     return await prisma.$transaction(async (tx) => {
       await lockGroup(tx, groupId);
@@ -51,7 +54,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (creates.length) await tx.attendanceRecord.createMany({ data: creates });
       for (const { memberIds, ...data } of updates.values()) {
         const updated = await tx.attendanceRecord.updateMany({ where: { sessionId, memberId: { in: memberIds } }, data });
-        if (updated.count !== memberIds.length) throw new Error("Data presensi berubah. Silakan muat ulang dan coba kembali.");
+        if (updated.count !== memberIds.length) throw new HttpError("Data presensi berubah. Silakan muat ulang dan coba kembali.", 409);
       }
       const attendanceVersion = input.expectedVersion + (changes.length ? 1 : 0);
       if (changes.length) {

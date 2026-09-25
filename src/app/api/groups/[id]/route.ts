@@ -1,3 +1,4 @@
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -7,7 +8,7 @@ import { apiError, ok } from "@/lib/api";
 import { lockGroup } from "@/lib/group-lock";
 import { groupSchema } from "@/lib/validators";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const currentUser = await requireAuth();
     const { id } = await params;
@@ -30,9 +31,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     const { id } = await params;
-    const input = groupSchema.partial().parse(await request.json());
+    const input = groupSchema.partial().parse(await readJsonRequest(request));
     return await prisma.$transaction(async (tx) => {
       await lockGroup(tx, id);
       const group = await tx.group.findUnique({ where: { id }, include: { sector: { include: { mahalli: true } } } });
@@ -75,8 +77,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, false);
     const currentUser = await requireAuth();
     const { id } = await params;
 

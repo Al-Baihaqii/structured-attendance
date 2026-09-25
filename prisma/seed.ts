@@ -2,6 +2,7 @@ import { PrismaClient, Role, GroupStatus } from "@prisma/client";
 import { ensureSeedAssignment } from "./seed-assignment";
 import { lockUser } from "../src/lib/user-lock";
 import bcrypt from "bcryptjs";
+import { assertSeedMode, bootstrapProductionAdmin } from "./production-bootstrap";
 
 const prisma = new PrismaClient();
 
@@ -60,6 +61,12 @@ async function upsertUser(input: {
 }
 
 async function main() {
+  assertSeedMode();
+  if (process.env.NODE_ENV === "production") {
+    await bootstrapProductionAdmin(prisma, { username: required("SUPER_ADMIN_USERNAME"), name: required("SUPER_ADMIN_NAME"), email: process.env.SUPER_ADMIN_EMAIL || undefined, password: required("SUPER_ADMIN_PASSWORD") });
+    console.log("Bootstrap production selesai tanpa memperbarui akun yang sudah ada.");
+    return;
+  }
   const seedPassword = required("SUPER_ADMIN_PASSWORD");
   const admin = await upsertUser({
     username: required("SUPER_ADMIN_USERNAME"),
@@ -142,8 +149,8 @@ async function main() {
 }
 
 main()
-  .catch((error) => {
-    console.error(error);
+  .catch(() => {
+    console.error("Seed gagal. Periksa konfigurasi bootstrap dan status database; tidak ada detail internal yang ditampilkan.");
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());

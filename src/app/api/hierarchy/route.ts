@@ -1,15 +1,20 @@
+import { getHierarchyReadScope } from "@/lib/read-scope";
+import { HttpError } from "@/lib/http-error";
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
+import { z } from "zod";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { requireRole, canViewGroup } from "@/lib/authorization";
+import { requireRole } from "@/lib/authorization";
 import { apiError, ok } from "@/lib/api";
 
 export async function GET() {
   try {
     const currentUser = await requireAuth();
+    const scope = getHierarchyReadScope(currentUser);
     const cities = await prisma.city.findMany({
-      where: currentUser.role === "SUPER_ADMIN" ? { isActive: true } : { id: currentUser.cityId ?? "__none__", isActive: true },
-      include: { mahallis: { where: { isActive: true }, include: { sectors: { where: { isActive: true }, orderBy: { name: "asc" } } }, orderBy: { name: "asc" } } },
+      where: { ...scope.city, isActive: true },
+      include: { mahallis: { where: { ...scope.mahalli, isActive: true }, include: { sectors: { where: { ...scope.sector, isActive: true }, orderBy: { name: "asc" } } }, orderBy: { name: "asc" } } },
       orderBy: { name: "asc" },
     });
     return ok({ cities });
@@ -20,9 +25,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"]);
-    const body = await request.json() as { type?: string; name?: string; cityId?: string; mahalliId?: string; sectorId?: string };
+    const body = z.object({ type: z.string().optional(), name: z.string().trim().min(1, "Nama wilayah wajib diisi.").max(100), cityId: z.string().optional(), mahalliId: z.string().optional() }).parse(await readJsonRequest(request));
     const name = body.name?.trim();
     if (!name) return NextResponse.json({ error: "Nama wilayah wajib diisi." }, { status: 400 });
 
@@ -39,10 +45,11 @@ export async function POST(request: Request) {
     if (body.type === "mahalli") {
       requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN"]);
       const cityId = body.cityId;
-      if (!cityId || (currentUser.role === "CITY_ADMIN" && cityId !== currentUser.cityId)) throw new Error("Kota berada di luar scope akses Anda.");
+      if (!cityId) throw new HttpError("Kota wajib dipilih.");
+      if (currentUser.role === "CITY_ADMIN" && cityId !== currentUser.cityId) throw new HttpError("Kota berada di luar scope akses Anda.", 403);
       const mahalli = await prisma.$transaction(async (tx) => {
         const city = await tx.city.findUnique({ where: { id: cityId } });
-        if (!city || city.isActive !== true) throw new Error("Kota tidak ditemukan atau tidak aktif.");
+        if (!city || city.isActive !== true) throw new HttpError("Kota tidak ditemukan atau tidak aktif.");
         const newMahalli = await tx.mahalli.create({ data: { name, cityId } });
         await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "MAHALLI", entityId: newMahalli.id, description: `Membuat mahalli ${newMahalli.name}.` } });
         return newMahalli;
@@ -53,11 +60,11 @@ export async function POST(request: Request) {
     if (body.type === "sector") {
       requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN"]);
       const mahalliId = body.mahalliId;
-      if (!mahalliId) throw new Error("Mahalli wajib dipilih.");
+      if (!mahalliId) throw new HttpError("Mahalli wajib dipilih.");
       const sector = await prisma.$transaction(async (tx) => {
         const mahalli = await tx.mahalli.findUnique({ where: { id: mahalliId }, include: { city: true } });
-        if (!mahalli || mahalli.isActive !== true || !mahalli.city || mahalli.city.isActive !== true) throw new Error("Mahalli atau Kota tidak ditemukan atau tidak aktif.");
-        if ((currentUser.role === "CITY_ADMIN" && mahalli.cityId !== currentUser.cityId) || (currentUser.role === "MAHALLI_ADMIN" && mahalli.id !== currentUser.mahalliId)) throw new Error("Mahalli berada di luar scope akses Anda.");
+        if (!mahalli || mahalli.isActive !== true || !mahalli.city || mahalli.city.isActive !== true) throw new HttpError("Mahalli atau Kota tidak ditemukan atau tidak aktif.");
+        if ((currentUser.role === "CITY_ADMIN" && mahalli.cityId !== currentUser.cityId) || (currentUser.role === "MAHALLI_ADMIN" && mahalli.id !== currentUser.mahalliId)) throw new HttpError("Mahalli berada di luar scope akses Anda.", 403);
         const newSector = await tx.sector.create({ data: { name, mahalliId } });
         await tx.activityLog.create({ data: { actorId: currentUser.userId, action: "CREATE", entityType: "SECTOR", entityId: newSector.id, description: `Membuat sektor ${newSector.name}.` } });
         return newSector;

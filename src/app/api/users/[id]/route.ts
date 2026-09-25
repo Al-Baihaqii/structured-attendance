@@ -1,3 +1,4 @@
+import { assertUnsafeRequest, readJsonRequest } from "@/lib/request-security";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, requireAuth } from "@/lib/auth";
@@ -9,12 +10,13 @@ import { validateUserScope } from "@/lib/user-scope";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, true);
     const currentUser = await requireAuth();
     requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"]);
     const { id } = await params;
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) return NextResponse.json({ error: "Pengguna tidak ditemukan." }, { status: 404 });
-    const input = userSchema.partial().parse(await request.json());
+    const input = userSchema.partial().parse(await readJsonRequest(request));
     const isSelf = existing.id === currentUser.userId;
     const role = input.role ?? existing.role;
     const requestedScope = {
@@ -68,8 +70,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    assertUnsafeRequest(request, false);
     const currentUser = await requireAuth();
     requireRole(currentUser, ["SUPER_ADMIN", "CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN"]);
 

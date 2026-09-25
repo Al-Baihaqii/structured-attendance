@@ -1,3 +1,4 @@
+import { getHierarchyReadScope, getAccessibleUsersWhere } from "@/lib/read-scope";
 import Link from "next/link";
 import { ArrowUpRight, FolderKanban, MapPinned, UsersRound, UserRoundCheck } from "lucide-react";
 import { getSession } from "@/lib/auth";
@@ -13,8 +14,8 @@ export default async function DashboardPage() {
   const groupsWhere = { ...getAccessibleGroupsWhere(user), status: { not: "DELETED" as const } };
   const [groups, users, cities, members, recentLogs, totalGroups] = await Promise.all([
     prisma.group.findMany({ where: groupsWhere, include: { sector: { include: { mahalli: { include: { city: true } } } }, members: { where: { isActive: true }, select: { id: true } }, assignments: { include: { musyrif: { select: { name: true } } } } }, orderBy: { updatedAt: "desc" }, take: 5 }),
-    prisma.user.count({ where: user.role === "SUPER_ADMIN" ? {} : { cityId: user.cityId ?? "__none__" } }),
-    prisma.city.count({ where: user.role === "SUPER_ADMIN" ? { isActive: true } : { id: user.cityId ?? "__none__", isActive: true } }),
+    prisma.user.count({ where: getAccessibleUsersWhere(user) }),
+    prisma.city.count({ where: { ...getHierarchyReadScope(user).city, isActive: true } }),
     prisma.member.count({ where: { isActive: true, group: groupsWhere } }),
     canReadActivityLogs ? prisma.activityLog.findMany({ select: { id: true, description: true, createdAt: true, actor: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 5 }) : Promise.resolve([]),
     prisma.group.count({ where: groupsWhere }),

@@ -1,3 +1,4 @@
+import { mutationRequest } from "./helpers/request";
 ﻿import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -43,7 +44,7 @@ const cases = [
   { name: "assignment DELETE", handler: assignment.DELETE, method: "DELETE" },
 ];
 beforeEach(() => { status = "ACTIVE"; mutations = []; user = { userId: "u1", username: "tester", name: "Tester", role: "SUPER_ADMIN", cityId: "c1", mahalliId: "h1", sectorId: "s1", sessionVersion: 0 }; });
-const call = (item: typeof cases[number]) => item.handler(new Request("http://localhost/api/test", { method: item.method, body: item.body ? JSON.stringify(item.body) : undefined }), { params: Promise.resolve({ id: "g1", sessionId: "a1" }) });
+const call = (item: typeof cases[number]) => item.handler(mutationRequest("http://localhost/api/test", { method: item.method, body: item.body ? JSON.stringify(item.body) : undefined }), { params: Promise.resolve({ id: "g1", sessionId: "a1" }) });
 for (const item of cases) {
   for (const state of ["ACTIVE", "INACTIVE"] as const) {
     test(`${item.name}: ${state} still permits authorized mutation`, async () => {
@@ -77,7 +78,7 @@ test("authorized users can still read deleted group history and pass meeting rea
     user.role = role;
     assert.doesNotThrow(() => assertGroupAccess(user, group()));
     assert.doesNotThrow(() => assertMeetingAccess(user, group()));
-    const response = await groupRoute.GET(new Request("http://localhost/api/groups/g1"), { params: Promise.resolve({ id: "g1" }) });
+    const response = await groupRoute.GET(mutationRequest("http://localhost/api/groups/g1"), { params: Promise.resolve({ id: "g1" }) });
     assert.equal(response.status, 200);
     assert.equal((await response.json()).group.assignmentHistory[0].id, "history1");
   }

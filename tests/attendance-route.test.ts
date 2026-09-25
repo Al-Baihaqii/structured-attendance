@@ -1,3 +1,4 @@
+import { mutationRequest } from "./helpers/request";
 ﻿import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -70,7 +71,7 @@ require(authPath);
 require.cache[authPath]!.exports = { requireAuth: async () => user };
 const { PATCH } = require("../src/app/api/groups/[id]/sessions/[sessionId]/attendance/route") as typeof import("../src/app/api/groups/[id]/sessions/[sessionId]/attendance/route");
 beforeEach(() => { sessionOwner = "u1"; tenureEndedAt = null; events = []; groupStatus = "ACTIVE"; cityId = "c1"; user = { userId: "u1", role: "MUSYRIF", cityId: "c1" }; onLock = undefined; onCommit = undefined; version = 0; rows = []; logs = []; writes = 0; writeQueries = 0; failLog = false; failWrite = false; allowed = true; sessionExists = true; memberExists = true; });
-const save = (expectedVersion: number, records = [{ memberId: "m1", status: "HADIR", reason: "" }]) => PATCH(new Request("http://localhost/api/groups/g1/sessions/a1/attendance", { method: "PATCH", body: JSON.stringify({ expectedVersion, records }) }), { params: Promise.resolve({ id: "g1", sessionId: "a1" }) });
+const save = (expectedVersion: number, records = [{ memberId: "m1", status: "HADIR", reason: "" }]) => PATCH(mutationRequest("http://localhost/api/groups/g1/sessions/a1/attendance", { method: "PATCH", body: JSON.stringify({ expectedVersion, records }) }), { params: Promise.resolve({ id: "g1", sessionId: "a1" }) });
 
 test("changed batch increments version once and records only actual changes without reason text", async () => {
   rows = [{ memberId: "m1", status: "HADIR", reason: null }];

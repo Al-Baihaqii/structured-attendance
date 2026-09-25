@@ -1,3 +1,4 @@
+import { getHierarchyReadScope } from "./read-scope";
 import { getReportDateFilter, type ReportDateParameters } from "./report-date-filter";
 import { createReportContext } from "./report-context";
 import type { Prisma } from "@prisma/client";
@@ -16,18 +17,7 @@ export async function getHierarchicalAttendanceReport(user: SessionUser, paramet
   const { filters, date } = getReportDateFilter(parameters);
   const selection = selectionSchema.parse(parameters);
   const scope = getAccessibleGroupsWhere(user);
-  const sectorScope: Prisma.SectorWhereInput = user.role === "SUPER_ADMIN" ? {}
-    : user.role === "CITY_ADMIN" ? { mahalli: { cityId: user.cityId ?? "__none__" } }
-    : user.role === "MAHALLI_ADMIN" ? { mahalliId: user.mahalliId ?? "__none__" }
-    : user.role === "SECTOR_ADMIN" ? { id: user.sectorId ?? "__none__" }
-    : { groups: { some: scope } };
-  const mahalliScope: Prisma.MahalliWhereInput = user.role === "SUPER_ADMIN" ? {}
-    : user.role === "CITY_ADMIN" ? { cityId: user.cityId ?? "__none__" }
-    : user.role === "MAHALLI_ADMIN" ? { id: user.mahalliId ?? "__none__" }
-    : { sectors: { some: sectorScope } };
-  const cityScope: Prisma.CityWhereInput = user.role === "SUPER_ADMIN" ? {}
-    : user.role === "CITY_ADMIN" ? { id: user.cityId ?? "__none__" }
-    : { mahallis: { some: mahalliScope } };
+  const { sector: sectorScope, mahalli: mahalliScope, city: cityScope } = getHierarchyReadScope(user);
   return prisma.$transaction(async tx => {
     const breadcrumbs: { name: string; selection: typeof selection }[] = [];
     if (selection.cityId) {

@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 import { prisma } from "./prisma";
 import type { SessionUser } from "./types";
+import { HttpError } from "./http-error";
 
 export const SESSION_COOKIE = "structured_attendance_session";
 const sessionSecret = () => {
@@ -107,6 +108,6 @@ export async function getSession(): Promise<SessionUser | null> {
 
 export async function requireAuth() {
   const session = await getSession();
-  if (!session) throw new Error("Sesi Anda tidak valid. Silakan masuk kembali.");
+  if (!session) throw new HttpError("Sesi Anda tidak valid. Silakan masuk kembali.", 401);
   return session;
 }

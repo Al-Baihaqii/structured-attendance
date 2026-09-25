@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { AuthorizationError, GroupDeletedError } from "./authorization";
+import { HttpError } from "./http-error";
 
 export function apiError(error: unknown) {
   if (error instanceof GroupDeletedError) {
@@ -12,8 +13,8 @@ export function apiError(error: unknown) {
   if (error instanceof AuthorizationError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
-  if (error instanceof Error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error instanceof HttpError) {
+    return NextResponse.json({ error: error.message }, { status: error.status });
   }
   return NextResponse.json({ error: "Terjadi kesalahan pada server." }, { status: 500 });
 }

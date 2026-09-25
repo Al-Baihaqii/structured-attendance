@@ -1,3 +1,4 @@
+import { mutationRequest } from "./helpers/request";
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createRequire } from "node:module";
@@ -61,7 +62,7 @@ const authPath = require.resolve("../src/lib/auth"); require(authPath);
 require.cache[authPath]!.exports = { requireAuth: async () => actor };
 const { POST, DELETE } = require("../src/app/api/groups/[id]/assignment/route");
 const { PATCH } = require("../src/app/api/groups/[id]/route");
-const call = (handler = POST, body: any = { musyrifId: "m1" }, groupId = "g1") => handler(new Request("http://localhost/api/test", { method: handler === DELETE ? "DELETE" : "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id: groupId }) });
+const call = (handler = POST, body: any = { musyrifId: "m1" }, groupId = "g1") => handler(mutationRequest("http://localhost/api/test", { method: handler === DELETE ? "DELETE" : "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id: groupId }) });
 beforeEach(() => {
   state = { group: { id: "g1", name: "Group", sectorId: "s1", status: "ACTIVE" }, rows: [], tenures: [], history: [], logs: [] };
   actor = { userId: "admin", role: "CITY_ADMIN", cityId: "c1" };

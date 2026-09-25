@@ -1,3 +1,4 @@
+import { mutationRequest } from "./helpers/request";
 import assert from "node:assert/strict";
 import test, { beforeEach, afterEach, mock } from "node:test";
 import { createRequire } from "node:module";
@@ -43,8 +44,8 @@ beforeEach(() => {
   mock.method(prisma.city, "findUnique", async ({ where }: any) => ["c1", "c2"].includes(where.id) ? { id: where.id } : null);
 });
 afterEach(() => mock.restoreAll());
-const patch = (body: unknown) => PATCH(new Request("http://localhost/api/users/target", { method: "PATCH", body: JSON.stringify(body) }), { params: Promise.resolve({ id: target.id }) });
-const create = (overrides: object = {}) => POST(new Request("http://localhost/api/users", { method: "POST", body: JSON.stringify({ username: "newuser", name: "New User", password: "password123", role: "MUSYRIF", cityId: "c1", mahalliId: "m1", sectorId: "s1", ...overrides }) }));
+const patch = (body: unknown) => PATCH(mutationRequest("http://localhost/api/users/target", { method: "PATCH", body: JSON.stringify(body) }), { params: Promise.resolve({ id: target.id }) });
+const create = (overrides: object = {}) => POST(mutationRequest("http://localhost/api/users", { method: "POST", body: JSON.stringify({ username: "newuser", name: "New User", password: "password123", role: "MUSYRIF", cityId: "c1", mahalliId: "m1", sectorId: "s1", ...overrides }) }));
 
 test("self role and scope changes are denied before any mutation", async () => {
   target = { ...base, id: actor.userId, role: actor.role, mahalliId: null, sectorId: null };
