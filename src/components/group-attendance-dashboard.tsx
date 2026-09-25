@@ -12,6 +12,8 @@ export function GroupAttendanceDashboard({ groupId, report, error }: { groupId: 
         <div><label className="label" htmlFor="report-from">Dari tanggal</label><input className="input" id="report-from" name="from" type="date" defaultValue={report?.filters.from} /></div>
         <div><label className="label" htmlFor="report-to">Sampai tanggal</label><input className="input" id="report-to" name="to" type="date" defaultValue={report?.filters.to} /></div>
         <button className="btn-primary" type="submit">Terapkan</button><Link className="btn-quiet" href={`/dashboard/groups/${groupId}`}>Semua tanggal</Link>
+        <div><label className="label" htmlFor="export-format">Jenis ekspor</label><select className="select" id="export-format" name="format" defaultValue="summary"><option value="summary">Ringkasan Pertemuan</option><option value="detail">Detail Presensi</option></select></div>
+        <button className="btn-quiet" type="submit" formAction={`/api/groups/${groupId}/attendance-export`}>Export CSV</button>
       </form>
       <Alert message={error || ""} />
       {report && <>
