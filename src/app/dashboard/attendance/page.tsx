@@ -6,7 +6,7 @@ import { AuthorizationError } from "@/lib/authorization";
 import { getHierarchicalAttendanceReport } from "@/lib/hierarchical-attendance-report";
 import { Card } from "@/components/ui";
 
-function href(selection: { cityId?: string; mahalliId?: string; sectorId?: string; from?: string; to?: string; history?: string }) {
+function href(selection: { cityId?: string; mahalliId?: string; sectorId?: string; from?: string; to?: string }) {
   const query = new URLSearchParams(Object.entries(selection).filter((entry): entry is [string, string] => entry[1] !== undefined));
   return `/dashboard/attendance?${query}`;
 }
@@ -24,7 +24,6 @@ export default async function AttendanceDashboardPage({ searchParams }: { search
   const labels = { city: "Kota", mahalli: "Mahalli", sector: "Sektor", group: "Kelompok" };
   return <div>
     <h1 className="text-3xl font-bold">Dashboard presensi</h1>
-    {user.role === "MUSYRIF" && <nav className="my-4 flex gap-4"><Link href="/dashboard/attendance">Penugasan aktif</Link><Link href="/dashboard/attendance?history=1">Riwayat penugasan saya</Link></nav>}
     <p className="mt-2 text-sm text-muted">Rekap berdasarkan wilayah kelompok saat ini. Termasuk kelompok aktif, nonaktif, dan dihapus.</p>
     <p className="mt-1 text-xs text-muted">{user.role === "MUSYRIF" ? "Hanya kelompok yang ditugaskan kepada Anda." : "Hanya wilayah dalam scope akses Anda."} Presensi yang belum tercatat tidak dihitung sebagai Alpa.</p>
     <p className="mt-2 text-xs text-muted">Periode: {report.filters.from || "Awal riwayat"} ? {report.filters.to || "Semua tanggal"}</p>

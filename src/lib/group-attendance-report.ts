@@ -8,7 +8,7 @@ import type { SessionUser } from "./types";
 
 const emptyCounts = () => ({ HADIR: 0, IZIN: 0, SAKIT: 0, ALPA: 0 });
 
-export async function getGroupAttendanceReport(user: SessionUser, groupId: string, parameters: { from?: unknown; to?: unknown; history?: unknown }) {
+export async function getGroupAttendanceReport(user: SessionUser, groupId: string, parameters: { from?: unknown; to?: unknown }) {
   const { filters, date } = getReportDateFilter(parameters);
   return prisma.$transaction(async tx => {
     const group = await tx.group.findUnique({ where: { id: groupId }, select: {
@@ -18,7 +18,7 @@ export async function getGroupAttendanceReport(user: SessionUser, groupId: strin
     } });
     if (!group) return null;
     assertGroupAccess(user, group, "view");
-    const where = { groupId, date, ...getSessionAccessWhere(user, filters.history ? "history" : "active") };
+    const where = { groupId, date, ...getSessionAccessWhere(user) };
     const sessions = await tx.attendanceSession.findMany({ where, select: { id: true, meetingNumber: true, date: true }, orderBy: [{ date: "asc" }, { id: "asc" }] });
     const rows = await tx.attendanceRecord.groupBy({ by: ["sessionId", "status"], where: { session: where }, _count: { _all: true } });
     const countsBySession = new Map(sessions.map(session => [session.id, emptyCounts()]));

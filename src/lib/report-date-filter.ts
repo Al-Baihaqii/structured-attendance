@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-export type ReportDateParameters = { from?: unknown; to?: unknown; history?: unknown };
+export type ReportDateParameters = { from?: unknown; to?: unknown };
 const dateParameter = z.preprocess(value => value === "" ? undefined : value,
   z.string({ error: "Tanggal tidak valid." }).pipe(z.iso.date("Tanggal tidak valid.")).optional());
-export const reportDateSchema = z.object({ from: dateParameter, to: dateParameter, history: z.enum(["1"]).optional() }).refine(
+export const reportDateSchema = z.object({ from: dateParameter, to: dateParameter }).refine(
   ({ from, to }) => !from || !to || from <= to,
   { message: "Tanggal awal harus sebelum atau sama dengan tanggal akhir." },
 );

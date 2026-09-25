@@ -13,14 +13,13 @@ export default async function GroupDetailPage({ params, searchParams }: { params
   if (!user) return null;
   const { id } = await params;
   const filters = await searchParams;
-  const history = filters.history === "1";
-  const group = await prisma.group.findUnique({ where: { id }, include: { sector: { include: { mahalli: { include: { city: true } } } }, attendanceSessions: { where: getSessionAccessWhere(user, history ? "history" : "active"), orderBy: { meetingNumber: "asc" } }, members: { orderBy: { name: "asc" } }, assignments: { include: { musyrif: { select: { id: true, name: true, username: true } } } }, assignmentHistory: { orderBy: { createdAt: "desc" }, take: 10, where: user.role === "MUSYRIF" ? { id: "__none__" } : {}, include: { changedBy: { select: { name: true } } } } } });
+  const group = await prisma.group.findUnique({ where: { id }, include: { sector: { include: { mahalli: { include: { city: true } } } }, attendanceSessions: { where: getSessionAccessWhere(user), orderBy: { meetingNumber: "asc" } }, members: { orderBy: { name: "asc" } }, assignments: { include: { musyrif: { select: { id: true, name: true, username: true } } } }, assignmentHistory: { orderBy: { createdAt: "desc" }, take: 10, where: user.role === "MUSYRIF" ? { id: "__none__" } : {}, include: { changedBy: { select: { name: true } } } } } });
   if (!group) notFound();
   try { assertGroupAccess(user, group); } catch { notFound(); }
   let report: Awaited<ReturnType<typeof getGroupAttendanceReport>> = null;
   let reportError: string | undefined;
   try {
-    report = await getGroupAttendanceReport(user, id, { from: filters.from, to: filters.to, history: filters.history });
+    report = await getGroupAttendanceReport(user, id, { from: filters.from, to: filters.to });
     if (!report) notFound();
   } catch (error) {
     if (error instanceof AuthorizationError) notFound();
@@ -28,5 +27,5 @@ export default async function GroupDetailPage({ params, searchParams }: { params
     else throw error;
   }
   const musyrifs = user.role === "MUSYRIF" ? [] : await prisma.user.findMany({ where: { role: "MUSYRIF", isActive: true, cityId: group.sector.mahalli.cityId }, select: { id: true, name: true, username: true, cityId: true }, orderBy: { name: "asc" } });
-  return <GroupDetailClient attendanceDashboard={<GroupAttendanceDashboard groupId={id} report={report} error={reportError} />} group={group} musyrifs={musyrifs} canManage={user.role !== "MUSYRIF" && group.status !== "DELETED"} canCreateMeeting={!history && group.status !== "DELETED" && group.assignments.some(a => a.endedAt === null) && canManageMeeting(user, group)} isMusyrif={user.role === "MUSYRIF"} history={history} />;
+  return <GroupDetailClient attendanceDashboard={<GroupAttendanceDashboard groupId={id} report={report} error={reportError} />} group={group} musyrifs={musyrifs} canManage={user.role !== "MUSYRIF" && group.status !== "DELETED"} canCreateMeeting={group.status !== "DELETED" && group.assignments.some(a => a.endedAt === null) && canManageMeeting(user, group)} isMusyrif={user.role === "MUSYRIF"} />;
 }

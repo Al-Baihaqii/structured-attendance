@@ -34,14 +34,15 @@ let records: { status: AttendanceStatus }[];
 let queries: number;
 let missing: boolean;
 let endedAt: Date | null;
+let activeOwner: string;
 let formRenders: number;
 const prismaPath = require.resolve("../src/lib/prisma"); require(prismaPath);
 require.cache[prismaPath]!.exports = { prisma: {
   attendanceSession: { findFirst: async ({ where }: any) => {
-    assert.deepEqual(where, { id: "a1", groupId: "g1", ...getSessionAccessWhere(user, "all") });
+    assert.deepEqual(where, { id: "a1", groupId: "g1", ...getSessionAccessWhere(user) });
     if (missing) return null;
-    return { id: "a1", groupId: "g1", assignment: { id: "t1", groupId: "g1", musyrifId: "u1", endedAt }, meetingNumber: 1, attendanceVersion: 0, date: new Date("2026-09-16"), records: [], group: {
-      id: "g1", name: "Group", status, sectorId: "s1", members: [], assignments: [{ id: "t1", musyrifId: "u1", endedAt: null }],
+    return { id: "a1", groupId: "g1", assignment: { id: "t1", groupId: "g1", musyrifId: "u1", endedAt }, meetingNumber: 1, attendanceVersion: 0, date: new Date("2026-09-16"), records: [{ memberId: "m1", status: "IZIN", reason: "Alasan historis" }], group: {
+      id: "g1", name: "Group", status, sectorId: "s1", members: [{ id: "m1", name: "Anggota nonaktif", isActive: false }], assignments: [{ id: endedAt ? "new" : "t1", musyrifId: activeOwner, endedAt: null }],
       sector: { name: "Sector", mahalliId: "h1", mahalli: { name: "Mahalli", cityId: "c1", city: { name: "City" } } },
     } };
   } },
@@ -59,7 +60,7 @@ const Page = require("../src/app/dashboard/groups/[id]/sessions/[sessionId]/page
 const page = () => Page({ params: Promise.resolve({ id: "g1", sessionId: "a1" }) });
 beforeEach(() => {
   user = { userId: "u1", role: "SUPER_ADMIN", cityId: "c1", mahalliId: "h1", sectorId: "s1" };
-  endedAt = null; formRenders = 0; status = "ACTIVE"; queries = 0; records = []; missing = false;
+  activeOwner = "u1"; endedAt = null; formRenders = 0; status = "ACTIVE"; queries = 0; records = []; missing = false;
 });
 test("empty summary renders Indonesian empty state", async () => {
   assert.match(renderToStaticMarkup(await page()), /Belum ada data/);
@@ -91,9 +92,20 @@ test("unauthenticated request cannot query summary", async () => {
   assert.equal(queries, 0);
 });
 
-test("former Musyrif direct session URL renders history without attendance controls", async () => {
-  user.role = "MUSYRIF"; endedAt = new Date();
+test("current Musyrif sees predecessor reasons and inactive members without edit controls", async () => {
+  user.role = "MUSYRIF"; user.userId = "replacement"; activeOwner = "replacement"; endedAt = new Date();
   const html = renderToStaticMarkup(await page());
   assert.match(html, /hanya baca/);
   assert.equal(formRenders, 0);
+  assert.match(html, /Alasan historis/);
+  assert.match(html, /Anggota nonaktif/);
+});
+
+test("former Musyrif cannot open predecessor session URL", async () => {
+  user.role = "MUSYRIF"; activeOwner = "replacement"; endedAt = new Date();
+  await assert.rejects(page()); assert.equal(queries, 0);
+});
+test("current Musyrif own session retains attendance controls", async () => {
+  user.role = "MUSYRIF";
+  renderToStaticMarkup(await page()); assert.equal(formRenders, 1);
 });

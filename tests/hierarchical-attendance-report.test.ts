@@ -112,8 +112,9 @@ for (const role of ["CITY_ADMIN", "MAHALLI_ADMIN", "SECTOR_ADMIN", "MUSYRIF"] as
   });
 }
 test("assigned MUSYRIF follows assignments outside their own sector", async () => {
-  user.role = "MUSYRIF"; groups[0].assignments = []; groups[2].assignments = [{ id: "t1", musyrifId: "u1", endedAt: null }];
-  assert.deepEqual((await report()).rows.map(r => r.id), ["c2"]);
+  user.role = "MUSYRIF"; groups[0].assignments = []; groups[1].assignments = [{ id: "t1", musyrifId: "u1", endedAt: null }];
+  assert.deepEqual((await report()).rows.map(r => r.id), ["c1"]);
+  assert.equal((await report()).rows[0].totalGroups, 1);
 });
 test("empty groups and empty authorized cities remain visible", async () => {
   records = []; sessions = []; cities.push({ id: "empty", name: "Empty", mahallis: [] });
@@ -183,7 +184,7 @@ test("same period reconciles member, group, and hierarchy totals including inact
 });
 
 
-test("all report paths isolate active workspace and closed tenure history", async () => {
+test("all reports expose full assigned-group history and reject former Musyrif", async () => {
   const group = groups[0];
   const old = { id: "old", groupId: group.id, musyrifId: "u1", endedAt: new Date(), group };
   const active = { id: "new", groupId: group.id, musyrifId: "replacement", endedAt: null, group };
@@ -200,17 +201,18 @@ test("all report paths isolate active workspace and closed tenure history", asyn
     return g;
   };
   user.role = "MUSYRIF";
-  assert.equal((await totals()).totalRecorded, 0);
-  const oldReport = await totals({ history: "1" });
-  assert.equal(oldReport.totalRecorded, 1); assert.equal(oldReport.counts.HADIR, 1);
+  for (const parameters of [{}, { history: "1" }]) {
+    await assert.rejects(getGroupAttendanceReport(user, group.id, parameters));
+    await assert.rejects(getMemberAttendanceHistory(user, group.id, "member", parameters));
+    assert.deepEqual((await report(parameters)).rows, []);
+  }
   user.userId = "replacement";
-  const newReport = await totals();
-  assert.equal(newReport.totalRecorded, 1); assert.equal(newReport.counts.ALPA, 1);
-  assert.equal((await totals({ history: "1" })).totalRecorded, 0);
+  const full = await totals();
+  assert.equal(full.totalRecorded, 2);
+  assert.equal(full.counts.HADIR, 1); assert.equal(full.counts.ALPA, 1);
+  assert.deepEqual((await totals({ history: "1" })).counts, full.counts);
   user.role = "SUPER_ADMIN";
-  assert.equal((await totals()).totalRecorded, 2);
-  // Returning Musyrif still sees only the new tenure in their active workspace.
+  assert.deepEqual((await totals()).counts, full.counts);
   active.musyrifId = "u1"; user.role = "MUSYRIF"; user.userId = "u1";
-  assert.equal((await totals()).counts.ALPA, 1);
-  assert.equal((await totals({ history: "1" })).counts.HADIR, 1);
+  assert.equal((await totals()).totalRecorded, 2);
 });

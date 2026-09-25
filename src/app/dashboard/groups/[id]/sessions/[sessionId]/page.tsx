@@ -14,7 +14,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
   if (!user) redirect("/login");
   const { id: groupId, sessionId } = await params;
   const session = await prisma.attendanceSession.findFirst({
-    where: { id: sessionId, groupId, ...getSessionAccessWhere(user, "all") },
+    where: { id: sessionId, groupId, ...getSessionAccessWhere(user) },
     include: {
       assignment: true,
       records: { select: { memberId: true, status: true, reason: true } },
@@ -70,7 +70,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
         <div className="flex items-center gap-3 border-b border-line px-5 py-4"><div className="rounded-xl bg-brand-soft p-2.5 text-brand"><UsersRound size={19} /></div><div><h2 className="font-bold">Daftar anggota kelompok</h2><p className="mt-1 text-xs text-muted">{group.members.length} anggota</p></div></div>
         {canEditSession(user, session) ? <AttendanceForm key={session.id} groupId={group.id} sessionId={session.id} members={group.members} records={session.records} attendanceVersion={session.attendanceVersion} /> : <div className="divide-y divide-line">
           <p className="p-5 text-sm text-muted">Riwayat presensi ? hanya baca.</p>
-          {group.members.map(member => <div className="p-5" key={member.id}><p>{member.name} ? {member.isActive ? "Aktif" : "Nonaktif"}</p><p>{session.records.find(record => record.memberId === member.id)?.status || "Belum ada data"}</p></div>)}
+          {group.members.map(member => <div className="p-5" key={member.id}><p>{member.name} ? {member.isActive ? "Aktif" : "Nonaktif"}</p><p>{session.records.find(record => record.memberId === member.id)?.status || "Belum ada data"}</p><p className="whitespace-pre-wrap break-words text-sm text-muted">{session.records.find(record => record.memberId === member.id)?.reason}</p></div>)}
         </div>}
       </Card>
     </div>

@@ -34,7 +34,7 @@ const member = require("../src/app/api/members/[id]/route");
 const assignment = require("../src/app/api/groups/[id]/assignment/route");
 const cases = [
   { name: "group PATCH", handler: groupRoute.PATCH, method: "PATCH", body: { name: "Changed" } },
-  { name: "session POST", handler: sessions.POST, method: "POST", body: { meetingNumber: 1, date: "2026-09-15" }, musyrif: true },
+  { name: "session POST", handler: sessions.POST, method: "POST", body: { records: [], date: "2026-09-15" }, musyrif: true },
   { name: "attendance PATCH", handler: attendance.PATCH, method: "PATCH", body: { expectedVersion: 0, records: [{ memberId: "m1", status: "HADIR" }] }, musyrif: true },
   { name: "member POST", handler: members.POST, method: "POST", body: { name: "Member" } },
   { name: "member PATCH", handler: member.PATCH, method: "PATCH", body: { name: "Member" } },

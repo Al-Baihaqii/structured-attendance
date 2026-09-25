@@ -46,15 +46,21 @@ export const attendanceRecordSchema = z.object({
   }
 });
 
-export const attendanceBatchSchema = z.object({
-  expectedVersion: z.number({ error: "Versi presensi wajib dikirim." }).int("Versi presensi tidak valid.").min(0, "Versi presensi tidak valid.").max(2147483646, "Versi presensi tidak valid."),
-  records: z.array(attendanceRecordSchema).min(1, "Belum ada presensi untuk disimpan."),
-}).superRefine(({ records }, ctx) => {
+export const attendanceRecordsSchema = z.array(attendanceRecordSchema).superRefine((records, ctx) => {
   const memberIds = new Set<string>();
   records.forEach((record, index) => {
-    if (memberIds.has(record.memberId)) ctx.addIssue({ code: "custom", path: ["records", index, "memberId"], message: "Anggota tidak boleh dikirim lebih dari satu kali." });
+    if (memberIds.has(record.memberId)) ctx.addIssue({ code: "custom", path: [index, "memberId"], message: "Anggota tidak boleh dikirim lebih dari satu kali." });
     memberIds.add(record.memberId);
   });
+});
+
+export const attendanceBatchSchema = z.object({
+  expectedVersion: z.number({ error: "Versi presensi wajib dikirim." }).int("Versi presensi tidak valid.").min(0, "Versi presensi tidak valid.").max(2147483646, "Versi presensi tidak valid."),
+  records: attendanceRecordsSchema.min(1, "Belum ada presensi untuk disimpan."),
+});
+
+export const meetingAttendanceSchema = meetingSchema.omit({ meetingNumber: true }).extend({
+  records: attendanceRecordsSchema,
 });
 
 export function validateScopeForRole(role: z.infer<typeof userSchema>["role"], scope: { cityId?: string | null; mahalliId?: string | null; sectorId?: string | null; }) {

@@ -21,7 +21,7 @@ require.cache[prismaPath]!.exports = { prisma: {
     assert.equal("metadata" in args.select, false);
     return [{ id: "log1", description: "Visible audit entry", entityType: "ATTENDANCE_SESSION", createdAt: new Date("2026-09-01"), actor: { name: "Admin", role: "SUPER_ADMIN" } }];
   } },
-  group: { findMany: async () => [] },
+  group: { findMany: async () => [], count: async () => 0 },
   user: { count: async () => 0 },
   city: { count: async () => 0 },
   member: { count: async () => 0 },

@@ -88,7 +88,7 @@ export function canViewGroup(currentUser: SessionUser, group: GroupWithScope) {
     return Boolean(currentUser.sectorId && group.sectorId === currentUser.sectorId);
   }
 
-  return Boolean(group.assignments?.some(assignment => assignment.musyrifId === currentUser.userId));
+  return isAssignedMusyrif(currentUser, group);
 }
 
 export function canManageGroup(currentUser: SessionUser, group: GroupWithScope) {
@@ -118,7 +118,7 @@ export function getAccessibleGroupsWhere(currentUser: SessionUser) {
     return { sectorId: currentUser.sectorId ?? "__none__" };
   }
 
-  return { assignments: { some: { musyrifId: currentUser.userId } } };
+  return { assignments: { some: { musyrifId: currentUser.userId, endedAt: null } }, sector: { mahalli: { cityId: currentUser.cityId ?? "__none__" } } };
 }
 
 export function assertGroupAccess(
@@ -144,12 +144,8 @@ export function assertMeetingAccess(currentUser: SessionUser, group: GroupWithSc
 }
 
 
-export function getSessionAccessWhere(user: SessionUser, mode: "active" | "history" | "all" = "active"): Prisma.AttendanceSessionWhereInput {
-  if (user.role !== "MUSYRIF") return { group: getAccessibleGroupsWhere(user) };
-  return { assignment: { musyrifId: user.userId,
-    ...(mode === "active" ? { endedAt: null, group: { sector: { mahalli: { cityId: user.cityId ?? "__none__" } } } }
-      : mode === "history" ? { endedAt: { not: null } } : {}),
-  } };
+export function getSessionAccessWhere(user: SessionUser): Prisma.AttendanceSessionWhereInput {
+  return { group: getAccessibleGroupsWhere(user) };
 }
 
 type SessionAccess = {
@@ -161,12 +157,15 @@ export function canEditSession(user: SessionUser, session: SessionAccess) {
   if (user.role !== "MUSYRIF") return canManageGroup(user, session.group);
   return Boolean(session.assignment && session.assignment.groupId === session.groupId
     && session.assignment.musyrifId === user.userId && session.assignment.endedAt === null
-    && isAssignedMusyrif(user, session.group));
+    && isAssignedMusyrif(user, session.group)
+    && session.group.assignments?.some(a => a.id === session.assignment?.id && a.endedAt === null));
 }
 export function assertSessionAccess(user: SessionUser, session: SessionAccess, action: "view" | "manage" = "view") {
-  const owns = session.assignment?.groupId === session.groupId && session.assignment.musyrifId === user.userId;
-  const allowed = user.role === "MUSYRIF"
-    ? owns && (action === "view" || (session.assignment?.endedAt === null && isAssignedMusyrif(user, session.group)))
+  const allowed = action === "view" ? canViewGroup(user, session.group)
+    : user.role === "MUSYRIF" ? Boolean(session.assignment?.groupId === session.groupId
+      && session.assignment.musyrifId === user.userId && session.assignment.endedAt === null
+      && isAssignedMusyrif(user, session.group)
+      && session.group.assignments?.some(a => a.id === session.assignment?.id && a.endedAt === null))
     : canManageGroup(user, session.group);
   if (!allowed) throw new AuthorizationError();
 }

@@ -56,8 +56,8 @@ export async function getHierarchicalAttendanceReport(user: SessionUser, paramet
       : await tx.group.findMany({ where: groupWhere, select: { id: true, name: true, status: true }, orderBy: [{ name: "asc" }, { id: "asc" }] });
     // Flat identity mappings stay on the server; never return descendants to the UI.
     const groups = await tx.group.findMany({ where: groupWhere, select: { id: true, sectorId: true, sector: { select: { mahalliId: true, mahalli: { select: { cityId: true } } } } } });
-    const sessions = await tx.attendanceSession.findMany({ where: { ...getSessionAccessWhere(user, filters.history ? "history" : "active"), group: groupWhere, date }, select: { id: true, groupId: true } });
-    const aggregates = await tx.attendanceRecord.groupBy({ by: ["sessionId", "status"], where: { session: { ...getSessionAccessWhere(user, filters.history ? "history" : "active"), group: groupWhere, date } }, _count: { _all: true } });
+    const sessions = await tx.attendanceSession.findMany({ where: { ...getSessionAccessWhere(user), group: groupWhere, date }, select: { id: true, groupId: true } });
+    const aggregates = await tx.attendanceRecord.groupBy({ by: ["sessionId", "status"], where: { session: { ...getSessionAccessWhere(user), group: groupWhere, date } }, _count: { _all: true } });
     const buckets = new Map(nodes.map(node => [node.id, { totalGroups: 0, totalMeetings: 0, counts: emptyCounts() }]));
     const groupNodes = new Map(groups.map(group => [group.id, level === "city" ? group.sector.mahalli.cityId : level === "mahalli" ? group.sector.mahalliId : level === "sector" ? group.sectorId : group.id]));
     for (const nodeId of groupNodes.values()) { const bucket = buckets.get(nodeId); if (bucket) bucket.totalGroups++; }

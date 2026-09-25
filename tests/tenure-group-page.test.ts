@@ -27,17 +27,24 @@ for (const role of ["MAHALLI_ADMIN", "SECTOR_ADMIN", "SUPER_ADMIN"]) {
     assert.ok(groupQuery.include.assignments);
   });
 }
-test("Musyrif workspace filters active tenure; history filters closed tenure and disables creation", async () => {
+test("active Musyrif reads full group history even with obsolete history query parameter", async () => {
   user.role = "MUSYRIF";
-  await page();
-  assert.equal(groupQuery.include.attendanceSessions.where.assignment.musyrifId, "u1");
-  assert.equal(groupQuery.include.attendanceSessions.where.assignment.endedAt, null);
-  assert.equal(candidateQuery, undefined);
   const tree = await page({ history: "1" });
-  assert.deepEqual(groupQuery.include.attendanceSessions.where.assignment.endedAt, { not: null });
-  assert.equal(tree.props.canCreateMeeting, false);
+  const where = groupQuery.include.attendanceSessions.where;
+  assert.equal(where.assignment, undefined);
+  assert.deepEqual(where.group.assignments.some, { musyrifId: "u1", endedAt: null });
+  assert.equal(candidateQuery, undefined);
+  assert.equal(tree.props.canCreateMeeting, true);
   assert.equal(tree.props.canManage, false);
+  assert.equal(tree.props.history, undefined);
 });
+test("former Musyrif direct group URL is rejected including obsolete history mode", async () => {
+  user.role = "MUSYRIF";
+  group.assignments[0].endedAt = new Date();
+  for (const query of [{}, { history: "1" }]) await assert.rejects(page(query));
+  assert.equal(candidateQuery, undefined);
+});
+
 test("outside-scope admin cannot query assignment candidates", async () => {
   user.mahalliId = "outside";
   await assert.rejects(page());

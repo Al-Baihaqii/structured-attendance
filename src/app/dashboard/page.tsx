@@ -11,18 +11,19 @@ export default async function DashboardPage() {
   if (!user) return null;
   const canReadActivityLogs = user.role === "SUPER_ADMIN";
   const groupsWhere = { ...getAccessibleGroupsWhere(user), status: { not: "DELETED" as const } };
-  const [groups, users, cities, members, recentLogs] = await Promise.all([
+  const [groups, users, cities, members, recentLogs, totalGroups] = await Promise.all([
     prisma.group.findMany({ where: groupsWhere, include: { sector: { include: { mahalli: { include: { city: true } } } }, members: { where: { isActive: true }, select: { id: true } }, assignments: { include: { musyrif: { select: { name: true } } } } }, orderBy: { updatedAt: "desc" }, take: 5 }),
     prisma.user.count({ where: user.role === "SUPER_ADMIN" ? {} : { cityId: user.cityId ?? "__none__" } }),
     prisma.city.count({ where: user.role === "SUPER_ADMIN" ? { isActive: true } : { id: user.cityId ?? "__none__", isActive: true } }),
     prisma.member.count({ where: { isActive: true, group: groupsWhere } }),
     canReadActivityLogs ? prisma.activityLog.findMany({ select: { id: true, description: true, createdAt: true, actor: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 5 }) : Promise.resolve([]),
+    prisma.group.count({ where: groupsWhere }),
   ]);
 
   return <div>
     <SectionHeading eyebrow="Ringkasan" title={`Halo, ${user.name.split(" ")[0]}`} description="Pantau struktur wilayah dan kelompok yang berada dalam tanggung jawab Anda." action={<Link href="/dashboard/groups" className="btn-primary">Kelola kelompok <ArrowUpRight size={16} /></Link>} />
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <MetricCard label="Total kelompok" value={groups.length} detail={user.role === "MUSYRIF" ? "Kelompok yang ditugaskan" : "Dalam scope Anda"} icon={<FolderKanban size={20} />} />
+      <MetricCard label="Total kelompok" value={totalGroups} detail={user.role === "MUSYRIF" ? "Kelompok yang ditugaskan" : "Dalam scope Anda"} icon={<FolderKanban size={20} />} />
       <MetricCard label="Anggota aktif" value={members} detail="Terdaftar di kelompok aktif" icon={<UsersRound size={20} />} accent="green" />
       <MetricCard label="Pengguna" value={users} detail="Akun dalam wilayah akses" icon={<UserRoundCheck size={20} />} accent="amber" />
       <MetricCard label="Kota terjangkau" value={cities} detail="Wilayah organisasi aktif" icon={<MapPinned size={20} />} accent="coral" />

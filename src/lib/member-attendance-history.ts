@@ -22,7 +22,7 @@ export async function getMemberAttendanceHistory(user: SessionUser, groupId: str
     if (!member) return null;
     assertGroupAccess(user, member.group, "view");
     const records = await tx.attendanceRecord.findMany({
-      where: { memberId, session: { groupId, ...getSessionAccessWhere(user, filters.history ? "history" : "active"), ...(Object.keys(date).length ? { date } : {}) } },
+      where: { memberId, session: { groupId, ...getSessionAccessWhere(user), ...(Object.keys(date).length ? { date } : {}) } },
       select: { id: true, status: true, session: { select: { meetingNumber: true, date: true } } },
       orderBy: [{ session: { date: "desc" } }, { id: "desc" }],
     });
