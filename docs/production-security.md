@@ -38,7 +38,9 @@ and enable nosniff/referrer protection. Production adds HSTS for the application
 it deliberately does not include subdomains or preload. CSP does not yet enforce
 script nonces and does not interfere with Next.js streaming/inline scripts.
 
-Still required before public release: login throttling, verification of Supabase
-Data API restrictions, secret strength, backups/restore, production pooling and
-migration procedure, and dependency advisory triage. This wave does not configure
-the hosting platform or connect to the production database.
+Shared Upstash login throttling now runs before account lookup/password verification.
+Production fails closed without Redis and a trusted client-IP source. See
+[deployment configuration](deployment.md) for limits, proxy modes, required secrets,
+Supabase security checks and the release procedure; [backup/restore](backup-restore.md)
+and [dependency advisory triage](dependency-security.md) cover the remaining operator
+gates. These changes do not configure hosting or connect to the production database.

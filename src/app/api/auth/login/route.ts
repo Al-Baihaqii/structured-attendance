@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createSession, verifyPassword } from "@/lib/auth";
 import { loginSchema } from "@/lib/validators";
 import { apiError } from "@/lib/api";
+import { checkLoginRateLimit } from "@/lib/login-rate-limit";
 
 export async function POST(request: Request) {
   try {
@@ -12,6 +13,9 @@ export async function POST(request: Request) {
     if (!process.env.AUTH_SECRET) {
       return NextResponse.json({ error: "Konfigurasi sesi server belum tersedia." }, { status: 500 });
     }
+
+    const limited = await checkLoginRateLimit(request, input.username);
+    if (limited) return limited;
 
     const user = await prisma.user.findUnique({ where: { username: input.username } });
     if (!user || !user.isActive || !(await verifyPassword(input.password, user.passwordHash))) {
