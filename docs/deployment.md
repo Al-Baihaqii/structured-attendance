@@ -53,6 +53,30 @@ Only non-production with **both** Upstash variables absent skips limiting, so no
 local tests need no Redis. With either variable configured, both must be valid and
 client-IP trust must also be configured. Automated tests stub the SDKs.
 
+### Local login returns 503
+
+`CLIENT_IP_MODE=none` does not disable a configured Redis limiter. To use the existing
+development-only bypass while keeping credentials in `.env`, create the git-ignored
+`.env.development.local` in the project root:
+
+```dotenv
+UPSTASH_REDIS_REST_URL=""
+UPSTASH_REDIS_REST_TOKEN=""
+CLIENT_IP_MODE=none
+```
+
+Stop and restart `npm run dev` after changing configuration. Next.js lookup order is
+the inherited process environment, `.env.development.local`, `.env.local`,
+`.env.development`, then `.env`. A variable already exported by the terminal/IDE
+takes priority even over the new file; remove those local overrides if necessary.
+Do not set `NODE_ENV=production` for `npm run dev`. Quoted empty values in dotenv
+files become empty strings, but whitespace or literal quote characters exported
+from a terminal are not empty values. Never print secret values to diagnose this.
+
+This file is not loaded by production builds/start. Production still requires Redis
+and a verified client-IP source. With both effective Redis values empty, development
+returns from the limiter before IP extraction, Redis initialization or network calls.
+
 ### Vercel
 
 - Select the Next.js preset and Node.js 24; install with `npm ci` and build with

@@ -114,6 +114,25 @@ test("only completely unconfigured non-production development bypasses Redis", a
   assert.equal((await checkLoginRateLimit(request(), "u")).status, 503);
 });
 
+test("explicit empty development Redis values allow login without trusting forwarded headers", async () => {
+  Object.assign(process.env, { NODE_ENV: "development", CLIENT_IP_MODE: "none",
+    UPSTASH_REDIS_REST_URL: "", UPSTASH_REDIS_REST_TOKEN: "" });
+  assert.equal((await POST(request())).status, 200);
+  assert.equal(calls.length, 0); assert.equal(reads, 1); assert.equal(verifies, 1);
+});
+
+test("the same empty Redis configuration still rejects production login", async () => {
+  Object.assign(process.env, { CLIENT_IP_MODE: "none", UPSTASH_REDIS_REST_URL: "", UPSTASH_REDIS_REST_TOKEN: "" });
+  assert.equal((await POST(request())).status, 503);
+  assert.equal(calls.length, 0); assert.equal(reads, 0); assert.equal(verifies, 0);
+});
+
+test("development with configured Redis and no trusted IP fails before Redis or account lookup", async () => {
+  Object.assign(process.env, { NODE_ENV: "development", CLIENT_IP_MODE: "none" });
+  assert.equal((await POST(request())).status, 503);
+  assert.equal(calls.length, 0); assert.equal(reads, 0); assert.equal(verifies, 0);
+});
+
 test("Redis errors and SDK timeout fail open responses are rejected without leaking errors", async () => {
   for (const failure of ["timeout", "error"]) {
     timeout = failure === "timeout"; failed = failure === "error";
