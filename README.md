@@ -1,94 +1,128 @@
 # Structured Attendance
 
-Structured Attendance adalah fondasi manajemen kehadiran berbasis hierarki untuk organisasi dengan struktur **Kota → Mahalli → Sektor → Kelompok**. Phase 1 berfokus pada authentication, role-based access, manajemen wilayah, pengguna, kelompok, anggota, penugasan Musyrif, dan activity log.
+Structured Attendance manages groups, Musyrif assignments, meetings, and attendance within a **City → Mahalli → Sector → Group** hierarchy. The interface is in Indonesian. Access is controlled by role, hierarchy scope, and current assignment.
 
-## Tech stack
+## Overview
 
-- Next.js App Router dan TypeScript
-- Tailwind CSS dengan komponen UI bergaya shadcn/ui
-- Prisma ORM dan PostgreSQL (Supabase PostgreSQL compatible)
-- Custom username/password authentication dengan bcrypt dan HTTP-only JWT cookie
-- Zod untuk validasi input
-- Node test runner untuk authorization tests
+Structured Attendance adalah sistem manajemen kehadiran berbasis hierarki
+untuk organisasi yang memiliki struktur wilayah dan kelompok.
 
-## Setup lokal
+Sistem membantu administrator mengelola:
 
-1. Install Node.js 24 LTS (atau 22 LTS) dan npm.
-2. Salin `.env.example` menjadi `.env` lalu isi nilainya.
-3. Install dependency:
+- wilayah organisasi
+- akun pengguna berdasarkan peran
+- kelompok binaan
+- penugasan Musyrif
+- pencatatan pertemuan
+- presensi anggota
+- laporan dan ekspor data
 
-   ```bash
-   npm install
+Aplikasi dirancang untuk menjaga histori organisasi tetap konsisten,
+meskipun terjadi perubahan penugasan atau struktur pengelolaan.
+
+
+## Screenshot
+
+[Structured Attendance Dashboard](docs/images/dashboard.png)
+[Structured Attendance Kelompok](docs/images/kelompok.png)
+[Structured Attendance Isi_Kelompok](docs/images/isi_kelompok.png)
+[Structured Attendance presensi](docs/images/presensi.png)
+
+
+## Documentation by audience
+
+| Audience | Guide | Purpose |
+| --- | --- | --- |
+| Clients, administrators, Musyrif | [Panduan pengguna](docs/client-guide.md) | Daily workflows, permissions, reports and CSV exports |
+| Deployment engineer | [Deployment guide](docs/deployment-guide.md) | Installation and reproducible release sequence |
+| Developer / hosting administrator | [Environment reference](docs/environment-reference.md) | Configuration, secrets, local/production differences |
+| Service owner / support operator | [Operations guide](docs/operations-guide.md) | Routine checks, incidents, recovery and handover |
+
+Existing engineering references remain available:
+
+- [Deployment security and proxy configuration](docs/deployment.md)
+- [Production security controls](docs/production-security.md)
+- [Supabase backup and restore runbook](docs/backup-restore.md)
+- [Dependency advisory triage](docs/dependency-security.md)
+- [Isolated PostgreSQL integration testing](docs/integration-tests.md)
+
+## Implemented capabilities
+
+- Username/password authentication with HTTP-only sessions and shared production login limits.
+- Scoped hierarchy, user, group and member management.
+- City-owned Musyrif accounts, multiple simultaneous group assignments, and at most one active Musyrif per group.
+- Combined meeting/attendance creation and batch attendance editing with conflict detection.
+- Group-wide meeting numbering and preserved assignment/session history.
+- Meeting summaries, group reports, member history and hierarchical drill-down reports.
+- Group CSV exports: meeting summary and attendance detail, with date filtering.
+- Activity Log access restricted to SUPER_ADMIN.
+
+Percentages use recorded attendance only. Missing entries are never inferred as Alpa. Inactive-member history is retained; authorized historical reports include deleted groups and attribute groups to their current hierarchy.
+
+The client guide distinguishes available screen controls from server/API rules. There is no implemented notification workflow, native mobile app, or self-service password-recovery flow. CSV downloads are reports, not database backups.
+
+## Developer quick start
+
+Use Node.js 24 LTS or 22 LTS, npm, and an isolated development PostgreSQL database. Do not point local setup or seed commands at production.
+
+1. Clone the handover repository and check out the agreed release revision.
+2. Copy `.env.example` to `.env`. Populate database connections, `AUTH_SECRET`, and local bootstrap inputs using the [environment reference](docs/environment-reference.md). Set `APP_ORIGIN=http://localhost:5000` and `SEED_DEMO_DATA=false`.
+3. For local login without Redis, put these overrides in git-ignored `.env.development.local`:
+
+   ```dotenv
+   UPSTASH_REDIS_REST_URL=""
+   UPSTASH_REDIS_REST_TOKEN=""
+   CLIENT_IP_MODE=none
    ```
 
-4. Generate Prisma Client dan terapkan migration ke database development:
+4. Confirm both database URLs target development, then run:
 
-   ```bash
+   ```sh
+   npm ci
    npm run db:generate
    npx prisma migrate deploy
-   ```
-
-5. Buat akun Super Admin dan, bila diperlukan, data demo:
-
-   ```bash
-   npm run db:seed
-   ```
-
-6. Jalankan development server:
-
-   ```bash
+   npx prisma db seed
    npm run dev
    ```
 
-## Environment variables
+5. Open `http://localhost:5000` and sign in with the bootstrap account you configured.
 
-| Variable | Kegunaan |
+`npm ci` also runs Prisma generation through `postinstall`; the explicit command is useful after schema changes. Development seed can update an existing bootstrap account, including its password. Use it only on development data. Prisma CLI reads `.env`; do not assume Next.js's `.env.development.local` precedence applies to CLI/seed commands. Restart the development server after environment changes.
+
+## Developer commands
+
+| Command | Purpose |
 | --- | --- |
-| `DATABASE_URL` | Connection string PostgreSQL untuk runtime Prisma |
-| `DIRECT_URL` | Connection string direct PostgreSQL untuk migration/Prisma |
-| `AUTH_SECRET` | Secret untuk menandatangani session |
-| `APP_ORIGIN` | Origin HTTPS yang diizinkan untuk mutation production |
-| `UPSTASH_REDIS_REST_URL` | Endpoint HTTPS Redis untuk pembatasan login |
-| `UPSTASH_REDIS_REST_TOKEN` | Token Redis server-only; wajib production |
-| `CLIENT_IP_MODE` | `vercel`, `trusted-proxy`, atau `none` (lokal) |
-| `TRUSTED_PROXY_IP_HEADER` | Header IP tunggal yang ditimpa proxy tepercaya |
-| `SUPER_ADMIN_USERNAME` | Username Super Admin saat seed |
-| `SUPER_ADMIN_PASSWORD` | Password Super Admin saat seed |
-| `SUPER_ADMIN_NAME` | Nama Super Admin saat seed |
-| `SUPER_ADMIN_EMAIL` | Email opsional Super Admin |
-| `NEXT_PUBLIC_APP_URL` | URL aplikasi |
-| `SEED_DEMO_DATA` | Gunakan `true` untuk membuat data demo |
+| `npm run dev` | Development server on port 5000 |
+| `npm test` | Node test suite, including mocked security/mutation/report tests |
+| `npx tsc --noEmit` | Type checking |
+| `npm run lint` | ESLint checks |
+| `npm run build` | Production build |
+| `npm start` | Production Node server; uses `PORT`, default 3000 |
+| `npx prisma validate` | Schema validation; does not apply migrations |
+| `npx prisma migrate status` | Inspect configured database migration status |
+| `npx prisma migrate deploy` | Apply committed migrations to the configured database |
+| `npm run test:integration` | Opt-in isolated PostgreSQL smoke test; requires separate setup |
+| `npm audit --omit=dev` | Check production dependency advisories |
 
-Jangan pernah commit `.env`, password, connection string, atau secret ke repository. Gunakan secret manager pada hosting production. Lihat [panduan deployment](docs/deployment.md) untuk seluruh konfigurasi.
+`db:push`, `db:migrate`, and `db:studio` are development tools, not production release steps. `db push` does not replace migration SQL containing custom constraints. Never use `migrate dev`, `migrate reset`, or `db push` against production.
 
-## Commands
+## Technical map
 
-```bash
-npm run dev          # development server di port 5000
-npm run build        # production build
-npm run start        # production server
-npm run lint         # lint Next.js
-npm test             # authorization tests
-npm run db:generate  # generate Prisma Client
-npm run db:push      # apply schema ke development database
-npm run db:migrate   # migration development
-npm run db:seed      # seed Super Admin dan optional demo data
-npm run db:studio    # Prisma Studio
-```
+| Location | Responsibility |
+| --- | --- |
+| `src/app/dashboard/` | Authenticated pages and reporting screens |
+| `src/app/api/` | Authentication, mutations and group CSV export |
+| `src/components/` | Forms, reports and local UI components |
+| `src/lib/` | Authentication, authorization, validators, locks and report queries |
+| `prisma/schema.prisma`, `prisma/migrations/` | PostgreSQL model and versioned SQL migrations |
+| `prisma/seed.ts`, `prisma/production-bootstrap.ts` | Development fixtures and create-only production bootstrap |
+| `tests/`, `scripts/` | Unit/mocked tests and isolated integration runner |
 
-## Authorization model
+Stack: Next.js App Router, React, TypeScript, Prisma, PostgreSQL, Tailwind CSS, custom authentication, and Upstash Redis for login limiting. Supabase supplies PostgreSQL; Supabase Auth is not used.
 
-Authorization selalu divalidasi di server menggunakan gabungan `role` dan `scope`, bukan hanya role. Musyrif hanya dapat melihat kelompok yang ditugaskan. Satu kelompok hanya boleh memiliki satu Musyrif aktif. Mutasi penting memakai activity log, dan penugasan Musyrif memakai transaksi Prisma.
+## Release and handover status
 
-## Deployment production
+Vercel deployment and login were reported working during UAT. Cloud Run and generic Node hosting have documented prerequisites; this repository does not establish that those deployments have been exercised. Follow the [deployment guide](docs/deployment-guide.md) and record the actual target, revision, validation results, service owners and recovery evidence at handover.
 
-Target: Vercel, Google Cloud Run, dan hosting Node.js yang mendukung Next.js runtime.
-Hosting PHP-only tidak didukung. `npm start` memakai `PORT` dari host (default 3000).
-Demo seed dilarang pada production. Migration production hanya memakai `prisma migrate deploy`, bukan `db push`, `migrate dev`, atau `migrate reset`.
-
-- [Deployment, environment, client-IP trust, dan checklist Supabase](docs/deployment.md)
-- [Backup/restore Supabase Free](docs/backup-restore.md)
-- [Keamanan production](docs/production-security.md)
-- [Advisory dependency yang ditunda](docs/dependency-security.md)
-
-Production URL:https://structured-attendance-system.vercel.app
+Mocked tests do not prove live PostgreSQL concurrency behavior. The opt-in integration foundation currently supplies a smoke test, not the deferred concurrency suite. Review the dated [dependency triage](docs/dependency-security.md) and run a fresh audit for each release. Documentation is not certification of hosting, grants, or backups.
